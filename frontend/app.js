@@ -149,8 +149,21 @@ class App {
   }
 
   _bindChartInteractions() {
+    // Handle segment clicks - use event delegation on the chart container
+    d3.select('#chart').select('.sunburst-chart')
+      .on('click', (event) => {
+        event.stopPropagation();
+      });
+    
+    // Bind to paths after they exist
+    this._bindChartPaths();
+  }
+  
+  _bindChartPaths() {
+    if (!this.chart.paths) return;
+    
     // Handle segment clicks
-    this.chart.paths?.on('click', (event, d) => {
+    this.chart.paths.on('click', (event, d) => {
       event.stopPropagation();
       this.chart.select(d);
 
@@ -160,7 +173,7 @@ class App {
     });
 
     // Handle hover
-    this.chart.paths?.on('mouseenter', (event, d) => {
+    this.chart.paths.on('mouseenter', (event, d) => {
       const rect = event.currentTarget.getBoundingClientRect();
       this.tooltip.show(d, {
         x: rect.left + rect.width / 2,
@@ -168,9 +181,10 @@ class App {
       });
     });
 
-    this.chart.paths?.on('mouseleave', () => {
+    this.chart.paths.on('mouseleave', () => {
       this.tooltip.hide();
     });
+  }
 
     // Breadcrumb navigation
     this.breadcrumb.onNavigate((index) => {
@@ -240,6 +254,9 @@ class App {
 
       // Render chart
       this.chart.render(this.currentRoot);
+
+      // Bind chart interactions after render
+      this._bindChartPaths();
 
       // Update breadcrumb
       const pathArray = path.split('/').filter((p) => p.length > 0);
