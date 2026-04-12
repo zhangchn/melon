@@ -143,6 +143,8 @@ export class SunburstChart {
 
   /**
    * Update the view to focus on a target node (DaisyDisk-style drill down)
+   * When clicking a directory, it moves up to replace its parent,
+   * and its children spread out to fill the circle.
    * @param {object} target - Target node to focus on
    * @param {boolean} animate - Whether to animate transition
    */
@@ -150,10 +152,17 @@ export class SunburstChart {
     const duration = animate ? this.options.animationDuration : 0;
     const radius = this.options.radius;
 
-    // Re-partition the data with target as root
+    // Build subtree with target as new root, but shift depths up by 1
+    // so target takes its parent's place in the visualization
+    const subtree = d3
+      .hierarchy(target.data)
+      .sum((d) => d.size)
+      .sort((a, b) => b.value - a.value);
+
+    // Re-partition with target's subtree
     const newRoot = d3
       .partition()
-      .size([2 * Math.PI, radius])(target);
+      .size([2 * Math.PI, radius])(subtree);
 
     // Update arc generator for new view
     const arc = d3
