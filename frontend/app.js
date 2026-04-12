@@ -157,6 +157,7 @@ class App {
     
     // Bind to paths after they exist
     this._bindChartPaths();
+    this._bindBreadcrumbNavigation();
   }
   
   _bindChartPaths() {
@@ -186,6 +187,7 @@ class App {
     });
   }
 
+  _bindBreadcrumbNavigation() {
     // Breadcrumb navigation
     this.breadcrumb.onNavigate((index) => {
       // Navigate to that level
