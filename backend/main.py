@@ -397,24 +397,51 @@ async def clear_cache(
 frontend_path = Path(__file__).parent.parent / "frontend"
 
 if frontend_path.exists():
-    from fastapi.responses import FileResponse, PlainTextResponse
+    from fastapi.responses import FileResponse, Response
+    from starlette.responses import PlainTextResponse
+    
+    # MIME type mapping
+    MIME_TYPES = {
+        '.js': 'application/javascript',
+        '.css': 'text/css',
+        '.html': 'text/html',
+        '.json': 'application/json',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.svg': 'image/svg+xml',
+        '.ico': 'image/x-icon',
+        '.woff': 'font/woff',
+        '.woff2': 'font/woff2',
+        '.ttf': 'font/ttf',
+        '.eot': 'application/vnd.ms-fontobject',
+    }
     
     @app.get("/")
     async def serve_index():
         """Serve the frontend index.html."""
-        return FileResponse(str(frontend_path / "index.html"))
+        return FileResponse(str(frontend_path / "index.html"), media_type="text/html")
     
-    @app.get("/{path:path}")
-    async def serve_static(path: str):
+    @app.get("/{full_path:path}")
+    async def serve_static(full_path: str):
         """Serve static files (CSS, JS, etc.)."""
-        # Don't interfere with API routes
-        if path.startswith("api/") or path.startswith("docs") or path.startswith("redoc") or path.startswith("openapi"):
-            raise HTTPException(status_code=404)
+        # Build full file path
+        file_path = frontend_path / full_path
         
-        file_path = frontend_path / path
-        if file_path.exists() and file_path.is_file():
-            return FileResponse(str(file_path))
-        raise HTTPException(status_code=404, detail="File not found")
+        # Check if file exists first
+        if not file_path.exists() or not file_path.is_file():
+            # Only then check if it's a blocked API path
+            if full_path.startswith("api/") or full_path in ["docs", "redoc", "openapi.json"]:
+                raise HTTPException(status_code=404)
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # Get file extension and determine MIME type
+        ext = file_path.suffix.lower()
+        media_type = MIME_TYPES.get(ext, "application/octet-stream")
+        
+        # Read file content and return with correct MIME type
+        content = file_path.read_bytes()
+        return Response(content=content, media_type=media_type)
 
 
 if __name__ == "__main__":
