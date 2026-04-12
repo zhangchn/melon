@@ -195,7 +195,6 @@ export class SunburstChart {
     this.paths
       .data(newRoot.descendants(), (d) => d.data.id)
       .join(
-        // Enter: new nodes fade in from center
         (enter) => enter
           .append('path')
           .attr('class', (d) => `chart-segment ${d.data.is_dir ? 'dir' : 'file'}`)
@@ -238,7 +237,6 @@ export class SunburstChart {
               return angle < 0.005 ? 0 : 1;
             })
           ),
-        // Update: existing nodes animate to new positions
         (update) => update
           .each(function(d) {
             // Store old position for interpolation
@@ -260,7 +258,6 @@ export class SunburstChart {
               return angle < 0.005 ? 0 : 1;
             })
           ),
-        // Exit: nodes that are no longer visible fade out
         (exit) => exit
           .call((exit) => exit
             .transition()
