@@ -144,7 +144,7 @@ export class SunburstChart {
   /**
    * Update the view to focus on a target node (DaisyDisk-style drill down)
    * When clicking a directory, it moves up to replace its parent,
-   * and its children spread out to fill the circle.
+   * and ALL children are recursively raised with angles recalculated to fill 360°.
    * @param {object} target - Target node to focus on
    * @param {boolean} animate - Whether to animate transition
    */
@@ -152,19 +152,32 @@ export class SunburstChart {
     const duration = animate ? this.options.animationDuration : 0;
     const radius = this.options.radius;
 
-    // Build subtree with target as new root, but shift depths up by 1
-    // so target takes its parent's place in the visualization
+    // Build new hierarchy from target's subtree
+    // This recursively raises all children by one level
     const subtree = d3
       .hierarchy(target.data)
       .sum((d) => d.size)
       .sort((a, b) => b.value - a.value);
 
-    // Re-partition with target's subtree
+    // Partition the subtree - children will automatically fill 360°
     const newRoot = d3
       .partition()
       .size([2 * Math.PI, radius])(subtree);
 
-    // Update arc generator for new view
+    // Create map of old positions for transition
+    const oldPositions = new Map();
+    if (this.root) {
+      this.root.each((d) => {
+        oldPositions.set(d.data.id, {
+          x0: d.x0,
+          x1: d.x1,
+          y0: d.y0,
+          y1: d.y1,
+        });
+      });
+    }
+
+    // Update arc generator
     const arc = d3
       .arc()
       .startAngle((d) => d.x0)
@@ -172,10 +185,11 @@ export class SunburstChart {
       .innerRadius((d) => Math.max(0, d.y0))
       .outerRadius((d) => Math.max(d.y0, d.y1 - 1));
 
-    // Animate paths to new positions
+    // Animate paths with smooth transition
     this.paths
       .data(newRoot.descendants(), (d) => d.data.id)
       .join(
+        // Enter: new nodes fade in from center
         (enter) => enter
           .append('path')
           .attr('class', (d) => `chart-segment ${d.data.is_dir ? 'dir' : 'file'}`)
@@ -183,23 +197,34 @@ export class SunburstChart {
           .attr('stroke', '#FFFFFF')
           .attr('stroke-width', 1)
           .attr('cursor', 'pointer')
+          .each(function(d) {
+            // Start from old position if exists, or from center
+            const old = oldPositions.get(d.data.id);
+            if (old) {
+              d.x0 = old.x0;
+              d.x1 = old.x1;
+              d.y0 = old.y0;
+              d.y1 = old.y1;
+            } else {
+              // New node: start from center
+              d.x0 = 0;
+              d.x1 = 0;
+              d.y0 = 0;
+              d.y1 = 0;
+            }
+          })
           .attr('d', arc)
           .style('opacity', 0)
           .call((enter) => enter
             .transition()
             .duration(duration)
-            .style('opacity', (d) => {
-              const angle = d.x1 - d.x0;
-              return angle < 0.005 ? 0 : 1;
-            })
-          ),
-        (update) => update
-          .call((update) => update
-            .transition()
-            .duration(duration)
-            .attrTween('d', (d) => {
-              const current = d3.select(this).datum();
-              const interpolate = d3.interpolate(current, d);
+            .attrTween('d', function(d) {
+              // Interpolate from old to new position
+              const old = oldPositions.get(d.data.id);
+              const interpolate = d3.interpolate(
+                old || { x0: 0, x1: 0, y0: 0, y1: 0 },
+                d
+              );
               return (t) => arc(interpolate(t));
             })
             .style('opacity', (d) => {
@@ -207,16 +232,44 @@ export class SunburstChart {
               return angle < 0.005 ? 0 : 1;
             })
           ),
+        // Update: existing nodes animate to new positions
+        (update) => update
+          .each(function(d) {
+            // Store old position for interpolation
+            const old = oldPositions.get(d.data.id);
+            if (old) {
+              d._prev = old;
+            }
+          })
+          .call((update) => update
+            .transition()
+            .duration(duration)
+            .attrTween('d', function(d) {
+              const old = d._prev || oldPositions.get(d.data.id) || { x0: d.x0, x1: d.x1, y0: d.y0, y1: d.y1 };
+              const interpolate = d3.interpolate(old, d);
+              return (t) => arc(interpolate(t));
+            })
+            .style('opacity', (d) => {
+              const angle = d.x1 - d.x0;
+              return angle < 0.005 ? 0 : 1;
+            })
+          ),
+        // Exit: nodes that are no longer visible fade out
         (exit) => exit
           .call((exit) => exit
             .transition()
             .duration(duration)
             .style('opacity', 0)
+            .attr('d', (d) => {
+              // Shrink to center
+              const shrink = { ...d, x0: d.x0, x1: d.x0, y0: d.y1, y1: d.y1 };
+              return arc(shrink);
+            })
             .remove()
           )
       );
 
-    // Update labels
+    // Update labels with transition
     const maxLabelRadius = this.options.radius * 0.9;
     this.labels
       .data(
@@ -231,11 +284,37 @@ export class SunburstChart {
         (enter) => enter
           .append('text')
           .attr('class', 'chart-label')
+          .style('opacity', 0)
           .attr('transform', (d) => {
-            const x = ((d.x0 + d.x1) / 2) * (180 / Math.PI);
-            const y = (d.y0 + d.y1) / 2;
-            return `translate(${Math.cos(((x - 90) * Math.PI) / 180) * y},${Math.sin(((x - 90) * Math.PI) / 180) * y}) rotate(${x - 90})`;
+            const old = oldPositions.get(d.data.id);
+            if (old) {
+              const x = ((old.x0 + old.x1) / 2) * (180 / Math.PI);
+              const y = (old.y0 + old.y1) / 2;
+              return `translate(${Math.cos(((x - 90) * Math.PI) / 180) * y},${Math.sin(((x - 90) * Math.PI) / 180) * y}) rotate(${x - 90})`;
+            }
+            return `translate(0,0)`;
           })
+          .each(function(d) {
+            const old = oldPositions.get(d.data.id);
+            if (old) {
+              d._prevLabel = {
+                x0: old.x0,
+                x1: old.x1,
+                y0: old.y0,
+                y1: old.y1,
+              };
+            }
+          })
+          .call((enter) => enter
+            .transition()
+            .duration(duration)
+            .attr('transform', (d) => {
+              const x = ((d.x0 + d.x1) / 2) * (180 / Math.PI);
+              const y = (d.y0 + d.y1) / 2;
+              return `translate(${Math.cos(((x - 90) * Math.PI) / 180) * y},${Math.sin(((x - 90) * Math.PI) / 180) * y}) rotate(${x - 90})`;
+            })
+            .style('opacity', 1)
+          )
           .attr('text-anchor', (d) => {
             const x = (d.x0 + d.x1) / 2 * (180 / Math.PI);
             return x > 180 ? 'end' : 'start';
@@ -249,21 +328,27 @@ export class SunburstChart {
           .attr('fill', '#FFFFFF')
           .attr('pointer-events', 'none')
           .attr('text-shadow', '0 1px 2px rgba(0,0,0,0.5)')
-          .style('opacity', 0)
-          .text((d) => (d.data.name.length > 20 ? d.data.name.slice(0, 18) + '…' : d.data.name))
-          .call((enter) => enter
-            .transition()
-            .duration(duration)
-            .style('opacity', 1)
-          ),
+          .text((d) => (d.data.name.length > 20 ? d.data.name.slice(0, 18) + '…' : d.data.name)),
         (update) => update
+          .each(function(d) {
+            const old = oldPositions.get(d.data.id);
+            if (old) {
+              d._prevLabel = old;
+            }
+          })
           .call((update) => update
             .transition()
             .duration(duration)
-            .attr('transform', (d) => {
-              const x = ((d.x0 + d.x1) / 2) * (180 / Math.PI);
-              const y = (d.y0 + d.y1) / 2;
-              return `translate(${Math.cos(((x - 90) * Math.PI) / 180) * y},${Math.sin(((x - 90) * Math.PI) / 180) * y}) rotate(${x - 90})`;
+            .attrTween('transform', (d) => {
+              const prev = d._prevLabel || oldPositions.get(d.data.id);
+              if (!prev) return null;
+              const interpolateX = d3.interpolate((prev.x0 + prev.x1) / 2, (d.x0 + d.x1) / 2);
+              const interpolateY = d3.interpolate((prev.y0 + prev.y1) / 2, (d.y0 + d.y1) / 2);
+              return (t) => {
+                const x = interpolateX(t) * (180 / Math.PI);
+                const y = interpolateY(t);
+                return `translate(${Math.cos(((x - 90) * Math.PI) / 180) * y},${Math.sin(((x - 90) * Math.PI) / 180) * y}) rotate(${x - 90})`;
+              };
             })
             .style('opacity', 1)
           ),
