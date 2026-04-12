@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Disk Usage Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <h1 class="logo">
+          <span class="logo-icon">📊</span>
+          Web Disk Analyzer
+        </h1>
+      </div>
+      <div class="header-right">
+        <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">
+          ⚙️
+        </button>
+        <button class="icon-btn" id="help-btn" title="Help" aria-label="Help">
+          ❓
+        </button>
+      </div>
+    </header>
+
+    <!-- Path Input -->
+    <div class="path-bar">
+      <div class="path-input-container">
+        <span class="path-icon">📁</span>
+        <input 
+          type="text" 
+          id="path-input" 
+          class="path-input" 
+          placeholder="Enter directory path..."
+          list="path-history"
+          aria-label="Directory path"
+        >
+        <datalist id="path-history">
+          <option value="/Users/cuser">
+          <option value="/Users/cuser/Documents">
+          <option value="/Users/cuser/Downloads">
+          <option value="/Users/cuser/Desktop">
+        </datalist>
+        <button id="scan-btn" class="scan-btn" aria-label="Scan directory">
+          Scan
+        </button>
+      </div>
+    </div>
+
+    <!-- Breadcrumb -->
+    <nav id="breadcrumb" class="breadcrumb" aria-label="Breadcrumb">
+      <span class="breadcrumb-placeholder">Scan a directory to begin</span>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main">
+      <!-- Chart Container -->
+      <div class="chart-container">
+        <div id="chart" class="chart"></div>
+        <div id="chart-empty" class="chart-empty hidden">
+          <div class="empty-icon">📁</div>
+          <p>Enter a directory path above to visualize disk usage</p>
+        </div>
+      </div>
+
+      <!-- Details Panel -->
+      <aside id="details" class="details-panel hidden">
+        <div class="details-header">
+          <h3 class="details-title">Contents</h3>
+          <button class="details-close" aria-label="Close panel">&times;</button>
+        </div>
+        <div class="details-content">
+          <div class="details-summary"></div>
+          <table class="details-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Size</th>
+                <th>Type</th>
+                <th>% of Parent</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Status Bar -->
+    <footer class="status-bar">
+      <div class="status-left">
+        <span id="status-info">Ready</span>
+      </div>
+      <div class="status-right">
+        <button id="search-btn" class="status-btn" title="Search (Ctrl+F)">
+          🔍 Search
+        </button>
+        <button id="refresh-btn" class="status-btn" title="Refresh (Ctrl+R)">
+          🔄 Refresh
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Progress Overlay -->
+  <div id="progress-overlay" class="progress-overlay hidden">
+    <div class="progress-content">
+      <div class="progress-spinner"></div>
+      <h3>Scanning...</h3>
+      <p id="progress-path" class="progress-path"></p>
+      <div class="progress-stats">
+        <span id="progress-files">0 files</span>
+        <span id="progress-size">0 MB</span>
+      </div>
+      <button id="cancel-scan-btn" class="cancel-btn">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Search Panel -->
+  <div id="search-panel" class="search-panel hidden">
+    <div class="search-header">
+      <h3>Search</h3>
+      <button class="search-close" aria-label="Close search">&times;</button>
+    </div>
+    <div class="search-body">
+      <input 
+        type="text" 
+        id="search-input" 
+        class="search-input" 
+        placeholder="Search files..."
+        aria-label="Search"
+      >
+      <div id="search-results" class="search-results"></div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button class="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-group">
+          <label class="setting-label">Exclude Patterns</label>
+          <div id="exclude-patterns" class="exclude-patterns">
+            <label class="checkbox-label">
+              <input type="checkbox" value=".git" checked>
+              <span>.git</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" value="node_modules" checked>
+              <span>node_modules</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" value="__pycache__" checked>
+              <span>__pycache__</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" value=".DS_Store" checked>
+              <span>.DS_Store</span>
+            </label>
+          </div>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">Max Depth: <span id="max-depth-value">50</span></label>
+          <input 
+            type="range" 
+            id="max-depth" 
+            class="range-input" 
+            min="1" 
+            max="50" 
+            value="50"
+          >
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">
+            <input type="checkbox" id="follow-symlinks">
+            Follow symbolic links
+          </label>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">Theme</label>
+          <select id="theme-select" class="select-input">
+            <option value="auto">Auto</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="clear-cache-btn" class="btn-secondary">Clear Cache</button>
+        <button id="save-settings-btn" class="btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help Modal -->
+  <div id="help-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Keyboard Shortcuts</h2>
+        <button class="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <table class="shortcuts-table">
+          <tr>
+            <td><kbd>Ctrl+O</kbd></td>
+            <td>Open path dialog</td>
+          </tr>
+          <tr>
+            <td><kbd>Ctrl+F</kbd></td>
+            <td>Open search</td>
+          </tr>
+          <tr>
+            <td><kbd>Ctrl+R</kbd></td>
+            <td>Refresh scan</td>
+          </tr>
+          <tr>
+            <td><kbd>Escape</kbd></td>
+            <td>Close panel / Clear selection</td>
+          </tr>
+          <tr>
+            <td><kbd>Backspace</kbd></td>
+            <td>Go up one level</td>
+          </tr>
+          <tr>
+            <td><kbd>0</kbd></td>
+            <td>Reset zoom</td>
+          </tr>
+          <tr>
+            <td><kbd>?</kbd></td>
+            <td>Show this help</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- D3.js from CDN -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  
+  <!-- Application Scripts -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>

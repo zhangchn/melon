@@ -2,6 +2,8 @@
 
 A web-based hierarchical disk usage analysis tool inspired by DaisyDisk. Visualizes disk usage as an interactive multi-ring sunburst chart.
 
+![Screenshot](screenshot.png)
+
 ## Features
 
 - **Interactive Sunburst Chart**: Multi-ring pie chart showing directory hierarchy
@@ -9,23 +11,11 @@ A web-based hierarchical disk usage analysis tool inspired by DaisyDisk. Visuali
 - **Fast Scanning**: Efficient file system traversal with caching
 - **Configurable**: Exclude patterns, depth limits, path restrictions
 - **Web-based**: Access from any browser, no installation needed
+- **Keyboard Shortcuts**: Full keyboard navigation support
 
-## Project Structure
+## Quick Start
 
-```
-melon/
-├── backend/           # FastAPI backend
-│   ├── main.py       # API server
-│   ├── scanner.py    # File system scanner
-│   ├── models.py     # Pydantic models
-│   └── requirements.txt
-├── frontend/          # Web UI (to be implemented)
-└── README.md
-```
-
-## Backend API
-
-### Quick Start
+### Backend
 
 ```bash
 cd backend
@@ -35,14 +25,57 @@ python main.py
 
 Server runs at http://localhost:8000
 
-### API Endpoints
+### Frontend
+
+The frontend is served automatically by the backend. Open http://localhost:8000 in your browser.
+
+For development with hot reload:
+
+```bash
+cd frontend
+python -m http.server 3000
+# Then update api/client.js baseUrl to 'http://localhost:8000'
+```
+
+## Project Structure
+
+```
+melon/
+├── backend/           # FastAPI backend
+│   ├── main.py       # API server
+│   ├── scanner.py    # File system scanner
+│   ├── models.py     # Pydantic models
+│   ├── test_api.py   # API tests (29 tests)
+│   ├── test_backend.py # Scanner tests (3 tests)
+│   └── requirements.txt
+├── frontend/          # Web UI
+│   ├── index.html    # Main page
+│   ├── app.js        # Application entry
+│   ├── chart.js      # D3 sunburst visualization
+│   ├── api/
+│   │   └── client.js # Backend API client
+│   ├── utils/
+│   │   └── transform.js # Data utilities
+│   ├── ui/
+│   │   ├── breadcrumb.js
+│   │   ├── details-panel.js
+│   │   └── tooltip.js
+│   └── styles/
+│       └── main.css
+├── .hermes/plans/    # Implementation plans
+└── README.md
+```
+
+## Backend API
+
+### Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /health` | Health check |
 | `GET /api/config` | Server configuration |
-| `GET /api/scan?path=/some/dir` | Scan directory |
-| `GET /api/children?path=/dir` | Get immediate children |
+| `GET /api/scan?path=/dir` | Scan directory |
+| `GET /api/children?parent_id=N` | Get children (lazy load) |
 | `GET /api/search?query=txt&root=/dir` | Search nodes |
 | `DELETE /api/cache` | Clear scan cache |
 
@@ -55,7 +88,7 @@ curl "http://localhost:8000/api/scan?path=/Users/cuser/Documents"
 # Get config
 curl "http://localhost:8000/api/config"
 
-# Search for files
+# Search for Python files
 curl "http://localhost:8000/api/search?query=.py&root=/Users/cuser"
 ```
 
@@ -70,7 +103,28 @@ Environment variables:
 | `MAX_DEPTH` | `50` | Max scan depth |
 | `MAX_RESULTS` | `100000` | Max nodes to return |
 
-See [backend/README.md](backend/README.md) for full API documentation.
+## Frontend
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+O` | Focus path input |
+| `Ctrl+F` | Open search |
+| `Ctrl+R` | Refresh scan |
+| `Escape` | Close panel / Clear selection |
+| `Backspace` | Go up one level |
+| `0` | Reset zoom |
+| `?` | Show help |
+
+### Chart Interactions
+
+- **Click segment**: Drill down into directory
+- **Click inner ring**: Navigate up
+- **Hover**: Show tooltip with details
+- **Double-click**: Reset zoom
+- **Scroll**: Zoom in/out
+- **Drag**: Rotate chart
 
 ## Data Format
 
@@ -95,29 +149,41 @@ Benefits:
 - Easy to reconstruct tree for any node
 - Efficient for compression
 
-## Frontend (Planned)
+## Testing
 
-The frontend will use D3.js to render an interactive sunburst chart:
+### Backend Tests
 
-- Each ring represents a directory depth level
-- Arc size proportional to file/folder size
-- Click to drill down, hover for details
-- Breadcrumb navigation
+```bash
+cd backend
+pytest -v
 
-See `.hermes/plans/` for the full implementation plan.
+# With coverage
+pytest --cov=. --cov-report=html
+```
+
+32 tests covering:
+- All API endpoints
+- Scanner functionality
+- Error handling
+- Performance
 
 ## Development
 
+### Running Tests
+
 ```bash
-# Run backend
-cd backend && python main.py
+# Backend
+cd backend && pytest -v
 
-# Run tests
-cd backend && python test_backend.py
-
-# Start frontend (when implemented)
-# Will be served automatically by backend at /
+# Frontend (manual)
+# Open frontend/index.html in browser
 ```
+
+### Code Style
+
+- Python: Follow PEP 8
+- JavaScript: ES6+ modules, async/await
+- CSS: BEM-like naming, CSS variables
 
 ## License
 
