@@ -187,10 +187,16 @@ export class SunburstChart {
       const y = d3.interpolate(view.y, 0)(t);
       const dy = d3.interpolate(view.dy, this.options.radius)(t);
 
-      return d3.zoomIdentity
-        .translate(this.options.width / 2, this.options.height / 2)
-        .scale(Math.min(this.options.width, this.options.height) / dy)
-        .rotate((-x * 180) / Math.PI - 90);
+      const scale = Math.min(this.options.width, this.options.height) / dy;
+      
+      // Apply full transform including rotation directly to the group
+      const rotate = (-x * 180 / Math.PI - 90);
+      this.g.attr('transform', 
+        `translate(${this.options.width / 2},${this.options.height / 2}) scale(${scale}) rotate(${rotate})`
+      );
+      
+      // Return a basic transform for the zoom behavior
+      return d3.zoomIdentity.scale(scale);
     };
   }
 
