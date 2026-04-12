@@ -397,15 +397,24 @@ async def clear_cache(
 frontend_path = Path(__file__).parent.parent / "frontend"
 
 if frontend_path.exists():
-    app.mount("/app", StaticFiles(directory=str(frontend_path), html=True), name="app")
+    from fastapi.responses import FileResponse, PlainTextResponse
     
     @app.get("/")
-    async def root():
-        """Serve the frontend application."""
-        index_path = frontend_path / "index.html"
-        if index_path.exists():
-            return FileResponse(str(index_path))
-        return {"message": "Backend API is running. Frontend not found."}
+    async def serve_index():
+        """Serve the frontend index.html."""
+        return FileResponse(str(frontend_path / "index.html"))
+    
+    @app.get("/{path:path}")
+    async def serve_static(path: str):
+        """Serve static files (CSS, JS, etc.)."""
+        # Don't interfere with API routes
+        if path.startswith("api/") or path.startswith("docs") or path.startswith("redoc") or path.startswith("openapi"):
+            raise HTTPException(status_code=404)
+        
+        file_path = frontend_path / path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
+        raise HTTPException(status_code=404, detail="File not found")
 
 
 if __name__ == "__main__":
