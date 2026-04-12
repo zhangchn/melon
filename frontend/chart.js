@@ -64,6 +64,9 @@ export class SunburstChart {
     // Clear existing
     this.g.selectAll('*').remove();
 
+    // Store original full hierarchy for navigation
+    this.originalRoot = data;
+
     // Apply partition layout
     const root = d3
       .partition()
@@ -71,6 +74,9 @@ export class SunburstChart {
 
     this.root = root;
     this.currentNode = root;
+    
+    // Track path of data nodes (not partitioned nodes) for navigation
+    this.currentPath = [root.data];
 
     // Create arc generator
     const arc = d3
@@ -382,11 +388,13 @@ export class SunburstChart {
 
   /**
    * Drill down into a directory node
-   * @param {object} node - Node to drill into
+   * @param {object} node - Node to drill into (partitioned node)
    */
   drillDown(node) {
     if (!node.children || node.children.length === 0) return;
 
+    // Add data node to path (not partitioned node)
+    this.currentPath.push(node.data);
     this.currentNode = node;
     this._updateView(node);
 
@@ -399,14 +407,33 @@ export class SunburstChart {
 
   /**
    * Navigate up one level
+   * Re-renders the chart showing the parent and all its children (siblings)
    */
   goUp() {
-    if (this.currentNode.parent) {
-      this.currentNode = this.currentNode.parent;
-      this._updateView(this.currentNode);
+    // Remove current data node from path
+    if (this.currentPath.length > 1) {
+      this.currentPath.pop();
+      
+      // Get the new current data node (parent level)
+      const newCurrentData = this.currentPath[this.currentPath.length - 1];
+      
+      // Re-build hierarchy from this data node
+      // This includes all siblings because we're using the original data
+      const subtree = d3
+        .hierarchy(newCurrentData)
+        .sum((d) => d.size)
+        .sort((a, b) => b.value - a.value);
+      
+      const newRoot = d3
+        .partition()
+        .size([2 * Math.PI, this.options.radius])(subtree);
+      
+      this.currentNode = newRoot;
+      this.root = newRoot;
+      this._updateView(newRoot);
 
       if (this._onNavigate) {
-        const path = this._buildPath(this.currentNode);
+        const path = this._buildPath(newRoot);
         this._onNavigate(path);
       }
     }
