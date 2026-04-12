@@ -142,62 +142,148 @@ export class SunburstChart {
   }
 
   /**
-   * Update the view to focus on a target node
+   * Update the view to focus on a target node (DaisyDisk-style drill down)
    * @param {object} target - Target node to focus on
    * @param {boolean} animate - Whether to animate transition
    */
   _updateView(target, animate = true) {
     const duration = animate ? this.options.animationDuration : 0;
+    const radius = this.options.radius;
 
-    // Calculate new view
-    const interpolateZoom = this._interpolateZoom(target);
+    // Re-partition the data with target as root
+    const newRoot = d3
+      .partition()
+      .size([2 * Math.PI, radius])(target);
 
-    // Animate transition
-    this.g
-      .transition()
-      .duration(duration)
-      .tween('zoom', () => {
-        const fn = interpolateZoom;
-        return (t) => {
-          const transform = fn(t);
-          this.svg.call(this.zoomBehavior.transform, transform);
-        };
-      });
+    // Update arc generator for new view
+    const arc = d3
+      .arc()
+      .startAngle((d) => d.x0)
+      .endAngle((d) => d.x1)
+      .innerRadius((d) => Math.max(0, d.y0))
+      .outerRadius((d) => Math.max(d.y0, d.y1 - 1));
 
-    // Update arc visibility
-    if (this.paths) {
-      this.paths.style('opacity', (d) => {
-        const angle = d.x1 - d.x0;
-        return angle < 0.005 ? 0 : 1;
-      });
-    }
+    // Animate paths to new positions
+    this.paths
+      .data(newRoot.descendants(), (d) => d.data.id)
+      .join(
+        (enter) => enter
+          .append('path')
+          .attr('class', (d) => `chart-segment ${d.data.is_dir ? 'dir' : 'file'}`)
+          .attr('fill', (d) => this._getColor(d))
+          .attr('stroke', '#FFFFFF')
+          .attr('stroke-width', 1)
+          .attr('cursor', 'pointer')
+          .attr('d', arc)
+          .style('opacity', 0)
+          .call((enter) => enter
+            .transition()
+            .duration(duration)
+            .style('opacity', (d) => {
+              const angle = d.x1 - d.x0;
+              return angle < 0.005 ? 0 : 1;
+            })
+          ),
+        (update) => update
+          .call((update) => update
+            .transition()
+            .duration(duration)
+            .attrTween('d', (d) => {
+              const current = d3.select(this).datum();
+              const interpolate = d3.interpolate(current, d);
+              return (t) => arc(interpolate(t));
+            })
+            .style('opacity', (d) => {
+              const angle = d.x1 - d.x0;
+              return angle < 0.005 ? 0 : 1;
+            })
+          ),
+        (exit) => exit
+          .call((exit) => exit
+            .transition()
+            .duration(duration)
+            .style('opacity', 0)
+            .remove()
+          )
+      );
+
+    // Update labels
+    const maxLabelRadius = this.options.radius * 0.9;
+    this.labels
+      .data(
+        newRoot.descendants().filter((d) => {
+          const angle = d.x1 - d.x0;
+          const r = (d.y0 + d.y1) / 2;
+          return angle > 0.05 && r < maxLabelRadius && d.data.name.length > 0;
+        }),
+        (d) => d.data.id
+      )
+      .join(
+        (enter) => enter
+          .append('text')
+          .attr('class', 'chart-label')
+          .attr('transform', (d) => {
+            const x = ((d.x0 + d.x1) / 2) * (180 / Math.PI);
+            const y = (d.y0 + d.y1) / 2;
+            return `translate(${Math.cos(((x - 90) * Math.PI) / 180) * y},${Math.sin(((x - 90) * Math.PI) / 180) * y}) rotate(${x - 90})`;
+          })
+          .attr('text-anchor', (d) => {
+            const x = (d.x0 + d.x1) / 2 * (180 / Math.PI);
+            return x > 180 ? 'end' : 'start';
+          })
+          .attr('dx', (d) => {
+            const x = (d.x0 + d.x1) / 2 * (180 / Math.PI);
+            return x > 180 ? -6 : 6;
+          })
+          .attr('dy', '0.35em')
+          .attr('font-size', '10px')
+          .attr('fill', '#FFFFFF')
+          .attr('pointer-events', 'none')
+          .attr('text-shadow', '0 1px 2px rgba(0,0,0,0.5)')
+          .style('opacity', 0)
+          .text((d) => (d.data.name.length > 20 ? d.data.name.slice(0, 18) + '…' : d.data.name))
+          .call((enter) => enter
+            .transition()
+            .duration(duration)
+            .style('opacity', 1)
+          ),
+        (update) => update
+          .call((update) => update
+            .transition()
+            .duration(duration)
+            .attr('transform', (d) => {
+              const x = ((d.x0 + d.x1) / 2) * (180 / Math.PI);
+              const y = (d.y0 + d.y1) / 2;
+              return `translate(${Math.cos(((x - 90) * Math.PI) / 180) * y},${Math.sin(((x - 90) * Math.PI) / 180) * y}) rotate(${x - 90})`;
+            })
+            .style('opacity', 1)
+          ),
+        (exit) => exit
+          .call((exit) => exit
+            .transition()
+            .duration(duration)
+            .style('opacity', 0)
+            .remove()
+          )
+      );
+
+    // Store new root and paths
+    this.root = newRoot;
+    this.paths = this.g.selectAll('path.chart-segment');
+    this.labels = this.g.selectAll('text.chart-label');
+
+    // Re-bind events to new paths
+    this._bindChartPaths();
   }
 
-  _interpolateZoom(target) {
-    const view = {
-      x: target.x0,
-      dx: target.x1 - target.x0,
-      y: target.y0,
-      dy: target.y1 - target.y0,
-    };
+  _getColor(d) {
+    return d.data.is_dir 
+      ? ['#3B82F6', '#6366F1', '#8B5CF6', '#A78BFA', '#C4B5FD'][d.depth % 5]
+      : ['#10B981', '#14B8A6', '#2DD4BF', '#5EEAD4', '#99F6E4'][d.depth % 5];
+  }
 
-    return (t) => {
-      const x = d3.interpolate(view.x, 0)(t);
-      const dx = d3.interpolate(view.dx, 2 * Math.PI)(t);
-      const y = d3.interpolate(view.y, 0)(t);
-      const dy = d3.interpolate(view.dy, this.options.radius)(t);
-
-      const scale = Math.min(this.options.width, this.options.height) / dy;
-      
-      // Apply full transform including rotation directly to the group
-      const rotate = (-x * 180 / Math.PI - 90);
-      this.g.attr('transform', 
-        `translate(${this.options.width / 2},${this.options.height / 2}) scale(${scale}) rotate(${rotate})`
-      );
-      
-      // Return a basic transform for the zoom behavior
-      return d3.zoomIdentity.scale(scale);
-    };
+  _bindChartPaths() {
+    // This will be called by app.js after render
   }
 
   /**

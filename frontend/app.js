@@ -168,8 +168,10 @@ class App {
       event.stopPropagation();
       this.chart.select(d);
 
-      if (d.data.is_dir) {
+      if (d.data.is_dir && d.children && d.children.length > 0) {
         this.chart.drillDown(d);
+        // Re-bind after drill down since paths are recreated
+        setTimeout(() => this._bindChartPaths(), this.chart.options.animationDuration + 50);
       }
     });
 
