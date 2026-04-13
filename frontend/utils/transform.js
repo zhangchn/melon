@@ -21,7 +21,7 @@ export function buildHierarchy(scanResult) {
     nodeMap.set(n.id, {
       ...n,
       children: [],
-      value: n.size, // D3 expects 'value' for sizing
+      value: n.is_dir ? 0 : n.size, // D3 expects 'value' for sizing
     });
   });
 
