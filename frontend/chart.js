@@ -162,7 +162,7 @@ export class SunburstChart {
     // This recursively raises all children by one level
     const subtree = d3
       .hierarchy(target.data)
-      .sum((d) => d.size)
+      .sum((d) => d.value)
       .sort((a, b) => b.value - a.value);
 
     // Partition the subtree - children will automatically fill 360°
@@ -420,7 +420,7 @@ export class SunburstChart {
       // This includes all siblings because we're using the original data
       const subtree = d3
         .hierarchy(newCurrentData)
-        .sum((d) => d.size)
+        .sum((d) => d.value)
         .sort((a, b) => b.value - a.value);
       
       const newRoot = d3
