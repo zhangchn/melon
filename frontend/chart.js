@@ -192,7 +192,8 @@ export class SunburstChart {
       .outerRadius((d) => Math.max(d.y0, d.y1 - 1));
 
     // Animate paths with smooth transition
-    this.paths
+    this.g
+      .selectAll('path.chart-segment')
       .data(newRoot.descendants(), (d) => d.data.id)
       .join(
         (enter) => enter
@@ -274,7 +275,8 @@ export class SunburstChart {
 
     // Update labels with transition
     const maxLabelRadius = this.options.radius * 0.9;
-    this.labels
+    this.g
+      .selectAll('text.chart-label')
       .data(
         newRoot.descendants().filter((d) => {
           const angle = d.x1 - d.x0;
