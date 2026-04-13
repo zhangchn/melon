@@ -158,6 +158,12 @@ export class SunburstChart {
     const duration = animate ? this.options.animationDuration : 0;
     const radius = this.options.radius;
 
+    // Debug: log target info
+    console.log('_updateView target:', target.data.name);
+    console.log('  target.data.value:', target.data.value);
+    console.log('  target.data.size:', target.data.size);
+    console.log('  target.children count:', target.children ? target.children.length : 0);
+
     // Build new hierarchy from target's subtree
     // This recursively raises all children by one level
     const subtree = d3
@@ -165,10 +171,23 @@ export class SunburstChart {
       .sum((d) => d.value)
       .sort((a, b) => b.value - a.value);
 
+    console.log('  subtree.value:', subtree.value);
+    console.log('  subtree.children count:', subtree.children ? subtree.children.length : 0);
+    if (subtree.children) {
+      console.log('  Children values:', subtree.children.map(c => c.value));
+      console.log('  Children total:', subtree.children.reduce((sum, c) => sum + c.value, 0));
+    }
+
     // Partition the subtree - children will automatically fill 360°
     const newRoot = d3
       .partition()
       .size([2 * Math.PI, radius])(subtree);
+
+    console.log('  newRoot.x1:', newRoot.x1, '(should be 2π =', 2 * Math.PI, ')');
+    if (newRoot.children) {
+      console.log('  newRoot children angles:', newRoot.children.map(c => c.x1 - c.x0));
+      console.log('  newRoot children total angle:', newRoot.children.reduce((sum, c) => sum + (c.x1 - c.x0), 0));
+    }
 
     // Create map of old positions for transition
     const oldPositions = new Map();
@@ -391,6 +410,18 @@ export class SunburstChart {
    */
   drillDown(node) {
     if (!node.children || node.children.length === 0) return;
+
+    // Debug: log node info
+    console.log('Drill down into:', node.data.name);
+    console.log('  Node x0/x1:', node.x0, node.x1);
+    console.log('  Node children:', node.children.length);
+    console.log('  Children total angle:', node.children.reduce((sum, c) => sum + (c.x1 - c.x0), 0));
+    console.log('  Node.data.value:', node.data.value);
+    console.log('  Node.data.size:', node.data.size);
+    if (node.children[0]) {
+      console.log('  First child value:', node.children[0].data.value);
+      console.log('  First child size:', node.children[0].data.size);
+    }
 
     // Add data node to path (not partitioned node)
     this.currentPath.push(node.data);
