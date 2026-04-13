@@ -58,13 +58,14 @@ export class SunburstChart {
 
   /**
    * Render the chart with hierarchy data
-   * @param {object} data - D3 hierarchy node (from buildHierarchy)
+   * @param {object} data - D3 hierarchy node (from buildHierarchy, BEFORE partition)
    */
   render(data) {
     // Clear existing
     this.g.selectAll('*').remove();
 
-    // Store original data for navigation (before partition modifies it)
+    // Store original HIERARCHY (before partition) for navigation
+    // This is critical - we need the unmodified tree structure
     this.originalData = data;
 
     // Apply partition layout
@@ -75,7 +76,7 @@ export class SunburstChart {
     this.root = root;
     this.currentNode = root;
     
-    // Track path for navigation
+    // Track path of partitioned nodes for navigation
     this.currentPath = [root];
 
     // Create arc generator
@@ -158,26 +159,24 @@ export class SunburstChart {
     const duration = animate ? this.options.animationDuration : 0;
     const radius = this.options.radius;
 
-    // Build new hierarchy from target's subtree
-    // Clone data to avoid value accumulation from .sum()
+    // Find target node in original unmodified data
+    const originalNode = this._findNodeInOriginal(target.data.id);
+    
+    if (!originalNode) {
+      console.error('Could not find node in original data:', target.data.id);
+      return;
+    }
+
+    // Clone original data to avoid modifying it
     const cloneData = (node) => {
-      const clone = { ...node };
-      // Remove ALL D3-added properties to start fresh
-      delete clone.x0;
-      delete clone.x1;
-      delete clone.y0;
-      delete clone.y1;
-      delete clone.depth;
-      delete clone.height;
-      delete clone.value;  // Remove old value so .sum() sets it fresh
-      // Keep size and children
+      const clone = { ...node.data };
       if (node.children) {
         clone.children = node.children.map(cloneData);
       }
       return clone;
     };
 
-    const clonedData = cloneData(target.data);
+    const clonedData = cloneData(originalNode);
     
     const subtree = d3
       .hierarchy(clonedData)
@@ -411,7 +410,7 @@ export class SunburstChart {
   drillDown(node) {
     if (!node.children || node.children.length === 0) return;
 
-    // Add to path
+    // Add partitioned node to path
     this.currentPath.push(node);
     this.currentNode = node;
     this._updateView(node);
@@ -421,6 +420,19 @@ export class SunburstChart {
       const path = this._buildPath(node);
       this._onNavigate(path);
     }
+  }
+  
+  /**
+   * Find a node by ID in the original hierarchy
+   * @param {number} nodeId - Node ID to find
+   * @returns {object|null} Found node or null
+   */
+  _findNodeInOriginal(nodeId) {
+    let found = null;
+    this.originalData.each((n) => {
+      if (n.data.id === nodeId) found = n;
+    });
+    return found;
   }
 
   /**
@@ -432,18 +444,24 @@ export class SunburstChart {
       this.currentPath.pop();
       const parentNode = this.currentPath[this.currentPath.length - 1];
       
-      // Rebuild from parent's data with cloned data to avoid value accumulation
+      // Find parent in original unmodified data
+      const originalNode = this._findNodeInOriginal(parentNode.data.id);
+      
+      if (!originalNode) {
+        console.error('Could not find node in original data:', parentNode.data.id);
+        return;
+      }
+      
+      // Clone original data
       const cloneData = (node) => {
-        const clone = { ...node };
-        delete clone.x0; delete clone.x1; delete clone.y0; delete clone.y1;
-        delete clone.depth; delete clone.height; delete clone.value;
+        const clone = { ...node.data };
         if (node.children) {
           clone.children = node.children.map(cloneData);
         }
         return clone;
       };
       
-      const clonedData = cloneData(parentNode.data);
+      const clonedData = cloneData(originalNode);
       const subtree = d3
         .hierarchy(clonedData)
         .sum((d) => d.size)
