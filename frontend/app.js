@@ -244,7 +244,7 @@ class App {
     const path = params.get('path');
 
     if (path) {
-      this.scan(path);
+      this.scan(path, {}, true); // silent = true for URL loads
     }
   }
 
@@ -252,8 +252,9 @@ class App {
    * Scan a directory
    * @param {string} path - Directory path
    * @param {object} options - Scan options
+   * @param {boolean} silent - If true, don't show alerts on error (for URL loads)
    */
-  async scan(path, options = {}) {
+  async scan(path, options = {}, silent = false) {
     try {
       this._showProgress();
       this.scanStartTime = Date.now();
@@ -287,7 +288,15 @@ class App {
       this._hideProgress();
     } catch (err) {
       this._hideProgress();
-      this._showError(err.message);
+      if (!silent) {
+        this._showError(err.message);
+      } else {
+        console.warn('Scan failed (silent):', err.message);
+        // Clear invalid path from URL
+        const url = new URL(window.location);
+        url.searchParams.delete('path');
+        window.history.replaceState({}, '', url);
+      }
       this._updateStatus(`Scan failed: ${err.message}`);
     }
   }
