@@ -79,6 +79,7 @@ export class SunburstChart {
     // Track path of partitioned nodes for navigation
     this.currentPath = [root];
 
+    /*
     // Create arc generator
     const arc = d3
       .arc()
@@ -144,6 +145,7 @@ export class SunburstChart {
       .attr('text-shadow', '0 1px 2px rgba(0,0,0,0.5)')
       .text((d) => (d.data.name.length > 20 ? d.data.name.slice(0, 18) + '…' : d.data.name));
 
+    */
     // Hide center (root takes full circle initially)
     this._updateView(root, false);
   }
@@ -173,16 +175,17 @@ export class SunburstChart {
       if (node.children) {
         clone.children = node.children.map(cloneData);
       }
+      if (node.is_dir) {
+        clone.value = 0;
+      }
       return clone;
     };
 
     const clonedData = cloneData(originalNode);
-    
     const subtree = d3
       .hierarchy(clonedData)
-      .sum((d) => d.size)
+      .sum((d) => d.value)
       .sort((a, b) => b.value - a.value);
-
     // Partition the subtree - children will automatically fill 360°
     const newRoot = d3
       .partition()
@@ -458,13 +461,16 @@ export class SunburstChart {
         if (node.children) {
           clone.children = node.children.map(cloneData);
         }
+        if (node.is_dir) {
+          clone.value = 0;
+        }
         return clone;
       };
       
       const clonedData = cloneData(originalNode);
       const subtree = d3
         .hierarchy(clonedData)
-        .sum((d) => d.size)
+        .sum((d) => d.value)
         .sort((a, b) => b.value - a.value);
       
       const newRoot = d3
