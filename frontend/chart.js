@@ -58,14 +58,15 @@ export class SunburstChart {
 
   /**
    * Render the chart with hierarchy data
-   * @param {object} data - D3 hierarchy node
+   * @param {object} data - D3 hierarchy node (from buildHierarchy)
    */
   render(data) {
     // Clear existing
     this.g.selectAll('*').remove();
 
-    // Store original full hierarchy for navigation
-    this.originalRoot = data;
+    // Store original FULL hierarchy (before partition) for navigation
+    // We need the complete tree to properly rebuild when navigating up
+    this.originalHierarchy = data;
 
     // Apply partition layout
     const root = d3
@@ -75,7 +76,7 @@ export class SunburstChart {
     this.root = root;
     this.currentNode = root;
     
-    // Track path of data nodes (not partitioned nodes) for navigation
+    // Track path of data nodes for navigation
     this.currentPath = [root.data];
 
     // Create arc generator
@@ -392,14 +393,33 @@ export class SunburstChart {
   drillDown(node) {
     if (!node.children || node.children.length === 0) return;
 
-    // Add data node to path (not partitioned node)
-    this.currentPath.push(node.data);
-    this.currentNode = node;
-    this._updateView(node);
+    // Find this node in the original hierarchy
+    const originalNode = this._findNodeInHierarchy(this.originalHierarchy, node.data.id);
+    
+    if (!originalNode) {
+      console.error('Could not find node in original hierarchy:', node.data.id);
+      return;
+    }
+
+    // Add data node to path
+    this.currentPath.push(originalNode.data);
+    
+    // Rebuild hierarchy from this node for proper 360° layout
+    const subtree = d3
+      .hierarchy(originalNode)
+      .sum((d) => d.value)
+      .sort((a, b) => b.value - a.value);
+    
+    const newRoot = d3
+      .partition()
+      .size([2 * Math.PI, this.options.radius])(subtree);
+    
+    this.currentNode = newRoot;
+    this._updateView(newRoot);
 
     // Trigger navigation callback
     if (this._onNavigate) {
-      const path = this._buildPath(node);
+      const path = this._buildPath(newRoot);
       this._onNavigate(path);
     }
   }
@@ -416,11 +436,18 @@ export class SunburstChart {
       // Get the new current data node (parent level)
       const newCurrentData = this.currentPath[this.currentPath.length - 1];
       
-      // Re-build hierarchy from this data node
-      // This includes all siblings because we're using the original data
+      // Find this node in the original hierarchy to get full subtree
+      const originalNode = this._findNodeInHierarchy(this.originalHierarchy, newCurrentData.id);
+      
+      if (!originalNode) {
+        console.error('Could not find node in original hierarchy:', newCurrentData.id);
+        return;
+      }
+      
+      // Re-build hierarchy from original node - this ensures all children are included
       const subtree = d3
-        .hierarchy(newCurrentData)
-        .sum((d) => d.size)
+        .hierarchy(originalNode)
+        .sum((d) => d.value)
         .sort((a, b) => b.value - a.value);
       
       const newRoot = d3
@@ -436,6 +463,22 @@ export class SunburstChart {
         this._onNavigate(path);
       }
     }
+  }
+  
+  /**
+   * Find a node by ID in a hierarchy
+   * @param {object} root - Root of hierarchy to search
+   * @param {number} nodeId - Node ID to find
+   * @returns {object|null} Found node or null
+   */
+  _findNodeInHierarchy(root, nodeId) {
+    let found = null;
+    root.each((node) => {
+      if (node.data.id === nodeId) {
+        found = node;
+      }
+    });
+    return found;
   }
 
   /**
