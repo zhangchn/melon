@@ -58,14 +58,14 @@ export class SunburstChart {
 
   /**
    * Render the chart with hierarchy data
-   * @param {object} data - D3 hierarchy node
+   * @param {object} data - D3 hierarchy node (from buildHierarchy)
    */
   render(data) {
     // Clear existing
     this.g.selectAll('*').remove();
 
-    // Store original full hierarchy for navigation
-    this.originalRoot = data;
+    // Store original data for navigation (before partition modifies it)
+    this.originalData = data;
 
     // Apply partition layout
     const root = d3
@@ -75,8 +75,8 @@ export class SunburstChart {
     this.root = root;
     this.currentNode = root;
     
-    // Track path of data nodes (not partitioned nodes) for navigation
-    this.currentPath = [root.data];
+    // Track path for navigation
+    this.currentPath = [root];
 
     // Create arc generator
     const arc = d3
@@ -158,36 +158,36 @@ export class SunburstChart {
     const duration = animate ? this.options.animationDuration : 0;
     const radius = this.options.radius;
 
-    // Debug: log target info
-    console.log('_updateView target:', target.data.name);
-    console.log('  target.data.value:', target.data.value);
-    console.log('  target.data.size:', target.data.size);
-    console.log('  target.children count:', target.children ? target.children.length : 0);
-
     // Build new hierarchy from target's subtree
-    // This recursively raises all children by one level
-    const subtree = d3
-      .hierarchy(target.data)
-      .sum((d) => d.value)
-      .sort((a, b) => b.value - a.value);
+    // Clone data to avoid value accumulation from .sum()
+    const cloneData = (node) => {
+      const clone = { ...node };
+      // Remove ALL D3-added properties to start fresh
+      delete clone.x0;
+      delete clone.x1;
+      delete clone.y0;
+      delete clone.y1;
+      delete clone.depth;
+      delete clone.height;
+      delete clone.value;  // Remove old value so .sum() sets it fresh
+      // Keep size and children
+      if (node.children) {
+        clone.children = node.children.map(cloneData);
+      }
+      return clone;
+    };
 
-    console.log('  subtree.value:', subtree.value);
-    console.log('  subtree.children count:', subtree.children ? subtree.children.length : 0);
-    if (subtree.children) {
-      console.log('  Children values:', subtree.children.map(c => c.value));
-      console.log('  Children total:', subtree.children.reduce((sum, c) => sum + c.value, 0));
-    }
+    const clonedData = cloneData(target.data);
+    
+    const subtree = d3
+      .hierarchy(clonedData)
+      .sum((d) => d.size)
+      .sort((a, b) => b.value - a.value);
 
     // Partition the subtree - children will automatically fill 360°
     const newRoot = d3
       .partition()
       .size([2 * Math.PI, radius])(subtree);
-
-    console.log('  newRoot.x1:', newRoot.x1, '(should be 2π =', 2 * Math.PI, ')');
-    if (newRoot.children) {
-      console.log('  newRoot children angles:', newRoot.children.map(c => c.x1 - c.x0));
-      console.log('  newRoot children total angle:', newRoot.children.reduce((sum, c) => sum + (c.x1 - c.x0), 0));
-    }
 
     // Create map of old positions for transition
     const oldPositions = new Map();
@@ -411,20 +411,8 @@ export class SunburstChart {
   drillDown(node) {
     if (!node.children || node.children.length === 0) return;
 
-    // Debug: log node info
-    console.log('Drill down into:', node.data.name);
-    console.log('  Node x0/x1:', node.x0, node.x1);
-    console.log('  Node children:', node.children.length);
-    console.log('  Children total angle:', node.children.reduce((sum, c) => sum + (c.x1 - c.x0), 0));
-    console.log('  Node.data.value:', node.data.value);
-    console.log('  Node.data.size:', node.data.size);
-    if (node.children[0]) {
-      console.log('  First child value:', node.children[0].data.value);
-      console.log('  First child size:', node.children[0].data.size);
-    }
-
-    // Add data node to path (not partitioned node)
-    this.currentPath.push(node.data);
+    // Add to path
+    this.currentPath.push(node);
     this.currentNode = node;
     this._updateView(node);
 
@@ -440,18 +428,25 @@ export class SunburstChart {
    * Re-renders the chart showing the parent and all its children (siblings)
    */
   goUp() {
-    // Remove current data node from path
     if (this.currentPath.length > 1) {
       this.currentPath.pop();
+      const parentNode = this.currentPath[this.currentPath.length - 1];
       
-      // Get the new current data node (parent level)
-      const newCurrentData = this.currentPath[this.currentPath.length - 1];
+      // Rebuild from parent's data with cloned data to avoid value accumulation
+      const cloneData = (node) => {
+        const clone = { ...node };
+        delete clone.x0; delete clone.x1; delete clone.y0; delete clone.y1;
+        delete clone.depth; delete clone.height; delete clone.value;
+        if (node.children) {
+          clone.children = node.children.map(cloneData);
+        }
+        return clone;
+      };
       
-      // Re-build hierarchy from this data node
-      // This includes all siblings because we're using the original data
+      const clonedData = cloneData(parentNode.data);
       const subtree = d3
-        .hierarchy(newCurrentData)
-        .sum((d) => d.value)
+        .hierarchy(clonedData)
+        .sum((d) => d.size)
         .sort((a, b) => b.value - a.value);
       
       const newRoot = d3
