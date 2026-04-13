@@ -175,6 +175,8 @@ class App {
       if (isCenterClick) {
         // Clicking center goes up one level
         this.chart.goUp();
+        // Re-bind after goUp since paths are recreated
+        setTimeout(() => this._bindChartPaths(), this.chart.options.animationDuration + 50);
       } else if (d.data.is_dir && d.children && d.children.length > 0) {
         // Clicking a non-center directory drills down
         this.chart.drillDown(d);
