@@ -52,6 +52,11 @@ export function buildHierarchy(scanResult) {
   // Attach metadata
   d3Root.rootPath = rootPath;
 
+  // Add rootPath to all nodes in the hierarchy
+  d3Root.each((node) => {
+    node.data.rootPath = rootPath;
+  });
+
   return d3Root;
 }
 
