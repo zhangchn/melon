@@ -410,14 +410,47 @@ class TestPerformance:
         """Response size is reasonable."""
         response = client.get(f"/api/scan?path={test_dir}")
         data = response.json()
-        
+
         # Response should have all required fields
         assert len(data["nodes"]) > 0
-        
+
         # Each node should be compact
         for node in data["nodes"]:
-            # Node shouldn't have excessive data
-            assert len(node.keys()) <= 7  # id, parent_id, name, size, depth, is_dir, error
+            # Node shouldn't have excessive data (now 8 with preview_url)
+            assert len(node.keys()) <= 8  # id, parent_id, name, size, depth, is_dir, error, preview_url
+
+
+class TestPreviewEndpoint:
+    """Test image preview endpoint."""
+
+    def test_preview_nonexistent_node(self, client):
+        """Preview for nonexistent node returns 404."""
+        response = client.get("/api/preview?node_id=999999&root=/")
+        assert response.status_code == 404
+
+    def test_preview_directory_not_allowed(self, client, test_dir):
+        """Preview for directory returns 400."""
+        # First scan to get a directory node
+        scan_response = client.get(f"/api/scan?path={test_dir}")
+        data = scan_response.json()
+
+        # Find a directory node
+        dir_node = next((n for n in data["nodes"] if n["is_dir"]), None)
+        if dir_node:
+            response = client.get(f"/api/preview?node_id={dir_node['id']}&root={test_dir}")
+            assert response.status_code == 400
+
+    def test_preview_non_image_not_allowed(self, client, test_dir):
+        """Preview for non-image file returns 400."""
+        # First scan to get a non-image file node
+        scan_response = client.get(f"/api/scan?path={test_dir}")
+        data = scan_response.json()
+
+        # Find a non-image file node (e.g., .py file)
+        file_node = next((n for n in data["nodes"] if not n["is_dir"] and not n.get("preview_url")), None)
+        if file_node:
+            response = client.get(f"/api/preview?node_id={file_node['id']}&root={test_dir}")
+            assert response.status_code == 400
 
 
 if __name__ == "__main__":

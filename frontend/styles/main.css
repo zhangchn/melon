@@ -408,6 +408,17 @@ body {
   letter-spacing: 0.5px;
 }
 
+.details-preview {
+  margin-top: 12px;
+}
+
+.details-preview img {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
 .details-table {
   width: 100%;
   border-collapse: collapse;
@@ -462,6 +473,17 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 300px;
+}
+
+.file-preview {
+  margin-top: 4px;
+}
+
+.file-preview img {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  object-fit: cover;
 }
 
 .error-indicator {
@@ -943,6 +965,19 @@ body {
   color: #F59E0B;
   font-size: 12px;
   margin-top: 8px;
+}
+
+.tooltip-preview {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #334155;
+}
+
+.tooltip-preview img {
+  max-width: 100px;
+  max-height: 100px;
+  border-radius: 4px;
+  object-fit: cover;
 }
 
 /* Utility Classes */

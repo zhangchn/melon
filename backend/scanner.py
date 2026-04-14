@@ -9,6 +9,11 @@ from dataclasses import dataclass, field
 import fnmatch
 
 
+# Image extensions that can be previewed
+IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg'}
+MAX_PREVIEW_SIZE = 5 * 1024 * 1024  # 5MB
+
+
 @dataclass
 class ScanNode:
     """Compact node representation for efficient memory usage."""
@@ -19,6 +24,7 @@ class ScanNode:
     depth: int
     is_dir: bool
     error: Optional[str] = None
+    preview_url: Optional[str] = None
 
 
 class DirectoryScanner:
@@ -156,17 +162,24 @@ class DirectoryScanner:
                 # Get size for files
                 size = 0
                 error = None
-                
+                preview_url = None
+
                 if not is_dir:
                     try:
                         size = stat_info.st_size
                         total_files += 1
+                        
+                        # Check if file is a small image for preview
+                        ext = current_path.suffix.lower()
+                        if ext in IMAGE_EXTENSIONS and size <= MAX_PREVIEW_SIZE:
+                            # Generate preview URL (will be handled by backend endpoint)
+                            preview_url = f"/api/preview?node_id={node_id}"
                     except (OSError, PermissionError) as e:
                         error = str(e)
                 else:
                     total_dirs += 1
                     dir_node_ids[current_path] = node_id
-                
+
                 # Create node
                 node = ScanNode(
                     id=node_id,
@@ -176,6 +189,7 @@ class DirectoryScanner:
                     depth=depth,
                     is_dir=is_dir,
                     error=error,
+                    preview_url=preview_url,
                 )
                 nodes.append(node)
                 current_node_id = node_id  # Capture current node's ID for children

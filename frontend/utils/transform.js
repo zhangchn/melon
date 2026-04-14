@@ -22,6 +22,7 @@ export function buildHierarchy(scanResult) {
       ...n,
       children: [],
       value: n.is_dir ? 0 : n.size, // D3 expects 'value' for sizing
+      rootPath: rootPath, // Add root path for preview URL
     });
   });
 

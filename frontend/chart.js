@@ -79,73 +79,6 @@ export class SunburstChart {
     // Track path of partitioned nodes for navigation
     this.currentPath = [root];
 
-    /*
-    // Create arc generator
-    const arc = d3
-      .arc()
-      .startAngle((d) => d.x0)
-      .endAngle((d) => d.x1)
-      .padAngle((d) => Math.min((d.x1 - d.x0) / 2, 0.005))
-      .padRadius(this.options.radius * 1.5)
-      .innerRadius((d) => d.y0)
-      .outerRadius((d) => Math.max(d.y0, d.y1 - 1));
-
-    // Create color function
-    const getColor = (d) => getNodeColor(d, d.data.is_dir);
-
-    // Create arcs
-    this.paths = this.g
-      .selectAll('path')
-      .data(root.descendants())
-      .join('path')
-      .attr('class', (d) => `chart-segment ${d.data.is_dir ? 'dir' : 'file'}`)
-      .attr('fill', getColor)
-      .attr('stroke', '#FFFFFF')
-      .attr('stroke-width', 1)
-      .attr('cursor', 'pointer')
-      .attr('d', arc)
-      .style('opacity', (d) => {
-        const angle = d.x1 - d.x0;
-        return angle < 0.005 ? 0 : 1;
-      });
-
-    // Add labels for large segments
-    this.labels = this.g
-      .selectAll('text')
-      .data(
-        root.descendants().filter((d) => {
-          const angle = d.x1 - d.x0;
-          const radius = (d.y0 + d.y1) / 2;
-          return (
-            angle > 0.05 &&
-            radius < this.options.radius * 0.9 &&
-            d.data.name.length > 0
-          );
-        })
-      )
-      .join('text')
-      .attr('class', 'chart-label')
-      .attr('transform', (d) => {
-        const x = ((d.x0 + d.x1) / 2) * (180 / Math.PI);
-        const y = (d.y0 + d.y1) / 2;
-        return `translate(${Math.cos(((x - 90) * Math.PI) / 180) * y},${Math.sin(((x - 90) * Math.PI) / 180) * y}) rotate(${x - 90})`;
-      })
-      .attr('text-anchor', (d) => {
-        const x = (d.x0 + d.x1) / 2 * (180 / Math.PI);
-        return x > 180 ? 'end' : 'start';
-      })
-      .attr('dx', (d) => {
-        const x = (d.x0 + d.x1) / 2 * (180 / Math.PI);
-        return x > 180 ? -6 : 6;
-      })
-      .attr('dy', '0.35em')
-      .attr('font-size', '10px')
-      .attr('fill', '#FFFFFF')
-      .attr('pointer-events', 'none')
-      .attr('text-shadow', '0 1px 2px rgba(0,0,0,0.5)')
-      .text((d) => (d.data.name.length > 20 ? d.data.name.slice(0, 18) + '…' : d.data.name));
-
-    */
     // Hide center (root takes full circle initially)
     this._updateView(root, false);
   }
@@ -341,20 +274,13 @@ export class SunburstChart {
             })
             .style('opacity', 1)
           )
-          .attr('text-anchor', (d) => {
-            const x = (d.x0 + d.x1) / 2 * (180 / Math.PI);
-            return x > 180 ? 'end' : 'start';
-          })
-          .attr('dx', (d) => {
-            const x = (d.x0 + d.x1) / 2 * (180 / Math.PI);
-            return x > 180 ? -6 : 6;
-          })
+          .attr('text-anchor', 'middle')
           .attr('dy', '0.35em')
-          .attr('font-size', '10px')
+          .attr('font-size', '6px')
           .attr('fill', '#FFFFFF')
           .attr('pointer-events', 'none')
           .attr('text-shadow', '0 1px 2px rgba(0,0,0,0.5)')
-          .text((d) => (d.data.name.length > 20 ? d.data.name.slice(0, 18) + '…' : d.data.name)),
+          .text((d) => (d.data.name.length > 15 ? d.data.name.slice(0, 13) + '…' : d.data.name)),
         (update) => update
           .each(function(d) {
             const old = oldPositions.get(d.data.id);

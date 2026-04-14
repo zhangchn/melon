@@ -75,15 +75,30 @@ def test_node_structure():
         depth=1,
         is_dir=False,
     )
-    
+
     assert node.id == 1
     assert node.parent_id == 0
     assert node.name == "test.txt"
     assert node.size == 1024
     assert node.depth == 1
     assert node.is_dir == False
-    
+
     print("Node structure test passed!")
+    return True
+
+
+def test_preview_url():
+    """Test that preview_url is set for small images."""
+    scanner = DirectoryScanner(max_depth=3, max_results=1000)
+
+    current_dir = str(Path(__file__).parent.resolve())
+    nodes, _ = scanner.scan(current_dir)
+
+    # Check that nodes have preview_url attribute
+    for node in nodes:
+        assert hasattr(node, 'preview_url'), f"Node {node.name} missing preview_url attribute"
+
+    print("Preview URL attribute test passed!")
     return True
 
 
@@ -92,6 +107,8 @@ if __name__ == "__main__":
     
     try:
         test_node_structure()
+        print()
+        test_preview_url()
         print()
         test_exclude_patterns()
         print()

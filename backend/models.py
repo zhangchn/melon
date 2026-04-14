@@ -13,6 +13,7 @@ class NodeData(BaseModel):
     depth: int = Field(..., description="Depth from root (0 = root)")
     is_dir: bool = Field(..., description="True if directory, false if file")
     error: Optional[str] = Field(None, description="Error message if scan failed")
+    preview_url: Optional[str] = Field(None, description="URL for preview (for small images)")
 
 
 class ScanResponse(BaseModel):

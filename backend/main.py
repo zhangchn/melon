@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 
-from scanner import DirectoryScanner, ScanNode
+from scanner import DirectoryScanner, ScanNode, MAX_PREVIEW_SIZE, IMAGE_EXTENSIONS
 from models import (
     NodeData,
     ScanResponse,
@@ -212,6 +212,7 @@ def _build_scan_response(
             depth=n.depth,
             is_dir=n.is_dir,
             error=n.error,
+            preview_url=n.preview_url,
         )
         for n in nodes
     ]
@@ -260,6 +261,7 @@ async def get_children(
                             depth=c.depth,
                             is_dir=c.is_dir,
                             error=c.error,
+                            preview_url=c.preview_url,
                         )
                         for c in children
                     ]
@@ -300,6 +302,7 @@ async def get_children(
                 depth=c.depth,
                 is_dir=c.is_dir,
                 error=c.error,
+                preview_url=c.preview_url,
             )
             for c in children
         ]
@@ -332,8 +335,16 @@ async def get_path_for_node(
         raise HTTPException(status_code=410, detail="Scan cache expired")
     
     full_path = scanner.get_path_for_node(nodes, node_id, str(cache_key))
+
+    # Find node to get preview_url
+    node = scanner.get_node_by_id(nodes, node_id)
     
-    return {"node_id": node_id, "root": str(cache_key), "path": full_path}
+    return {
+        "node_id": node_id, 
+        "root": str(cache_key), 
+        "path": full_path,
+        "preview_url": node.preview_url if node else None
+    }
 
 
 @app.get("/api/search")
@@ -368,12 +379,82 @@ async def search_nodes(
                 "depth": node.depth,
                 "is_dir": node.is_dir,
                 "path": scanner.get_path_for_node(nodes, node.id, str(cache_key)),
+                "preview_url": node.preview_url,
             })
             
             if len(results) >= limit:
                 break
     
     return {"query": query, "root": str(cache_key), "results": results, "count": len(results)}
+
+
+@app.get("/api/preview")
+async def get_preview(
+    node_id: int = Query(..., description="Node ID of the image file"),
+    root: str = Query(..., description="Root path of the scan"),
+):
+    """
+    Get preview for a small image file.
+
+    Returns the image file directly for files smaller than 5MB.
+    """
+    # Find in cache
+    cache_key = Path(root).resolve()
+
+    if str(cache_key) not in scan_cache:
+        raise HTTPException(status_code=404, detail="Scan not found in cache")
+
+    nodes, _, cache_time = scan_cache[str(cache_key)]
+
+    if time.time() - cache_time >= CACHE_TTL:
+        raise HTTPException(status_code=410, detail="Scan cache expired")
+
+    # Find the node
+    node = None
+    for n in nodes:
+        if n.id == node_id:
+            node = n
+            break
+
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+
+    if node.is_dir:
+        raise HTTPException(status_code=400, detail="Preview is only available for files")
+
+    # Reconstruct full path
+    full_path = scanner.get_path_for_node(nodes, node_id, str(cache_key))
+    file_path = Path(full_path)
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Check file size
+    if file_path.stat().st_size > MAX_PREVIEW_SIZE:
+        raise HTTPException(status_code=413, detail="File too large for preview")
+
+    # Check if it's an image
+    ext = file_path.suffix.lower()
+    if ext not in {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg'}:
+        raise HTTPException(status_code=400, detail="File is not an image")
+
+    # Serve the file
+    if ext in {'.svg'}:
+        media_type = "image/svg+xml"
+    elif ext in {'.jpg', '.jpeg'}:
+        media_type = "image/jpeg"
+    elif ext == '.png':
+        media_type = "image/png"
+    elif ext == '.gif':
+        media_type = "image/gif"
+    elif ext == '.bmp':
+        media_type = "image/bmp"
+    elif ext == '.webp':
+        media_type = "image/webp"
+    else:
+        media_type = "application/octet-stream"
+
+    return FileResponse(file_path, media_type=media_type)
 
 
 @app.delete("/api/cache")

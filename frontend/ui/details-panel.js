@@ -60,6 +60,12 @@ export class DetailsPanel {
       `);
     } else {
       const ext = node.data.name.split('.').pop();
+      const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg'].includes(ext.toLowerCase());
+      const previewHtml = isImage && node.data.preview_url 
+        ? `<div class="details-preview" style="margin-top: 12px;">
+             <img src="${node.data.preview_url}?root=${encodeURIComponent(node.data.rootPath)}" style="max-width: 200px; max-height: 200px; border-radius: 8px; object-fit: cover;" />
+           </div>`
+        : '';
       summary.html(`
         <div class="summary-stat">
           <span class="stat-value">${formatSize(node.data.size)}</span>
@@ -69,6 +75,7 @@ export class DetailsPanel {
           <span class="stat-value">${ext.toUpperCase()}</span>
           <span class="stat-label">Extension</span>
         </div>
+        ${previewHtml}
       `);
     }
 
@@ -86,16 +93,25 @@ export class DetailsPanel {
         .attr('class', (d) => `details-row ${d.data.is_dir ? 'dir' : 'file'}`)
         .attr('tabindex', '0')
         .html(
-          (d) => `
+          (d) => {
+            const isImage = d.data.preview_url;
+            const previewHtml = isImage 
+              ? `<div class="file-preview" style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                   <img src="${d.data.preview_url}?root=${encodeURIComponent(d.data.rootPath)}" style="width: 32px; height: 32px; border-radius: 4px; object-fit: cover;" />
+                 </div>`
+              : '';
+            return `
           <td class="col-name">
             <span class="file-icon">${getFileIcon(d.data.name, d.data.is_dir)}</span>
             <span class="file-name">${d.data.name}</span>
             ${d.data.error ? `<span class="error-indicator" title="${d.data.error}">⚠️</span>` : ''}
+            ${previewHtml}
           </td>
           <td class="col-size">${formatSize(d.data.size)}</td>
           <td class="col-type">${d.data.is_dir ? 'Folder' : 'File'}</td>
           <td class="col-percent">${calculatePercentage(d.data, node.data).toFixed(1)}%</td>
-        `
+        `;
+          }
         );
 
       // Row click
