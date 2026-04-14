@@ -63,7 +63,7 @@ export class DetailsPanel {
       const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg'].includes(ext.toLowerCase());
       const previewHtml = isImage && node.data.preview_url 
         ? `<div class="details-preview" style="margin-top: 12px;">
-             <img src="${node.data.preview_url}?root=${encodeURIComponent(node.data.rootPath)}" style="max-width: 200px; max-height: 200px; border-radius: 8px; object-fit: cover;" />
+             <img src="${node.data.preview_url}" style="max-width: 200px; max-height: 200px; border-radius: 8px; object-fit: cover;" />
            </div>`
         : '';
       summary.html(`
@@ -97,7 +97,7 @@ export class DetailsPanel {
             const isImage = d.data.preview_url;
             const previewHtml = isImage 
               ? `<div class="file-preview" style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
-                   <img src="${d.data.preview_url}?root=${encodeURIComponent(d.data.rootPath)}" style="width: 32px; height: 32px; border-radius: 4px; object-fit: cover;" />
+                   <img src="${d.data.preview_url}" style="width: 32px; height: 32px; border-radius: 4px; object-fit: cover;" />
                  </div>`
               : '';
             return `

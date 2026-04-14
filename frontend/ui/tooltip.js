@@ -82,12 +82,7 @@ export class Tooltip {
     // Update preview (if available - small images)
     const previewEl = this.tooltip.select('.tooltip-preview');
     if (node.data.preview_url) {
-      // Construct full preview URL with root parameter
-      const rootParam = node.data.rootPath ? `&root=${encodeURIComponent(node.data.rootPath)}` : '';
-      const previewSrc = node.data.preview_url.includes('?') 
-        ? `${node.data.preview_url}${rootParam}`
-        : `${node.data.preview_url}?root=${encodeURIComponent(node.data.rootPath)}`;
-      previewEl.html(`<img src="${previewSrc}" style="max-width: 100px; max-height: 100px; border-radius: 4px; object-fit: cover;" />`)
+      previewEl.html(`<img src="${node.data.preview_url}" style="max-width: 100px; max-height: 100px; border-radius: 4px; object-fit: cover;" />`)
         .style('display', 'block');
     } else {
       previewEl.style('display', 'none');

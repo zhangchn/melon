@@ -55,6 +55,11 @@ export function buildHierarchy(scanResult) {
   // Add rootPath to all nodes in the hierarchy
   d3Root.each((node) => {
     node.data.rootPath = rootPath;
+    // Update preview_url to include root parameter
+    if (node.data.preview_url) {
+      const separator = node.data.preview_url.includes('?') ? '&' : '?';
+      node.data.preview_url = `${node.data.preview_url}${separator}root=${encodeURIComponent(rootPath)}`;
+    }
   });
 
   return d3Root;
