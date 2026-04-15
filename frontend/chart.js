@@ -37,6 +37,12 @@ export class SunburstChart {
       .attr('style', 'max-width: 100%; height: auto; font-family: Inter, system-ui, sans-serif;');
 
     this.g = this.svg.append('g').attr('class', 'sunburst-chart');
+
+    // Separate groups for paths and labels to ensure correct z-order
+    // Paths group is added first (bottom layer)
+    this.pathsGroup = this.g.append('g').attr('class', 'paths-layer');
+    // Labels group is added second (top layer) - always above paths
+    this.labelsGroup = this.g.append('g').attr('class', 'labels-layer');
   }
 
   _initZoom() {
@@ -61,8 +67,9 @@ export class SunburstChart {
    * @param {object} data - D3 hierarchy node (from buildHierarchy, BEFORE partition)
    */
   render(data) {
-    // Clear existing
-    this.g.selectAll('*').remove();
+    // Clear existing paths and labels (but keep the groups for z-order)
+    this.pathsGroup.selectAll('*').remove();
+    this.labelsGroup.selectAll('*').remove();
 
     // Store original HIERARCHY (before partition) for navigation
     // This is critical - we need the unmodified tree structure
@@ -145,8 +152,8 @@ export class SunburstChart {
       .innerRadius((d) => Math.max(0, d.y0))
       .outerRadius((d) => Math.max(d.y0, d.y1 - 1));
 
-    // Animate paths with smooth transition
-    this.g
+    // Animate paths with smooth transition (use pathsGroup for correct z-order)
+    this.pathsGroup
       .selectAll('path.chart-segment')
       .data(newRoot.descendants(), (d) => d.data.id)
       .join(
@@ -227,9 +234,9 @@ export class SunburstChart {
           )
       );
 
-    // Update labels with transition
+    // Update labels with transition (use labelsGroup for correct z-order)
     const maxLabelRadius = this.options.radius * 0.9;
-    this.g
+    this.labelsGroup
       .selectAll('text.chart-label')
       .data(
         newRoot.descendants().filter((d) => {
@@ -315,8 +322,8 @@ export class SunburstChart {
 
     // Store new root and paths
     this.root = newRoot;
-    this.paths = this.g.selectAll('path.chart-segment');
-    this.labels = this.g.selectAll('text.chart-label');
+    this.paths = this.pathsGroup.selectAll('path.chart-segment');
+    this.labels = this.labelsGroup.selectAll('text.chart-label');
 
     // Re-bind events to new paths
     this._bindChartPaths();
