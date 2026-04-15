@@ -41,7 +41,7 @@ class App {
     // Bind chart events
     this.chart
       .onNodeClick((node) => {
-        this.details.render(this.chart.selectedNode);
+        this.details.render(this.chart.selectedNode, this.currentData?.root);
         this.details.show();
         this._updateStatus(`Selected: ${node.name} (${formatSize(node.size)})`);
       })

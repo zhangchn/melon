@@ -203,6 +203,20 @@ export class DiskAnalyzerApi {
       : '/api/cache';
     return this.request(endpoint, { method: 'DELETE' });
   }
+
+  /**
+   * Get thumbnail URL for a video file
+   * @param {number} nodeId - Node ID of the video file
+   * @param {string} root - Root path of the scan
+   * @returns {string} Thumbnail URL
+   */
+  getThumbnailUrl(nodeId, root) {
+    const params = new URLSearchParams({
+      node_id: nodeId.toString(),
+      root: root,
+    });
+    return `${this.baseUrl}/api/thumbnail?${params}`;
+  }
 }
 
 // Export singleton for convenience
