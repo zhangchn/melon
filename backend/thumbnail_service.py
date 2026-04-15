@@ -79,29 +79,22 @@ class ThumbnailService:
         if not timestamps:
             return None
         
-        rows = (len(timestamps) + columns - 1) // columns
+        num_thumbs = len(timestamps)
+        rows = (num_thumbs + columns - 1) // columns
         
-        # Build ffmpeg inputs and filter complex
-        inputs = []
-        filter_parts = []
+        # Use fps filter to get evenly distributed frames
+        # fps=1/(duration/num_thumbs) gives us num_thumbs frames over the duration
+        fps_value = num_thumbs / duration if duration > 0 else 1
         
-        for i, ts in enumerate(timestamps):
-            # Each thumbnail: seek to timestamp, take 1 frame
-            inputs.extend(['-ss', str(ts), '-i', file_path, '-frames:v', '1'])
-            filter_parts.append(f'[{i}:v]scale={thumb_width}:-1[thumb{i}]')
-        
-        # Tile all thumbnails into grid
-        thumb_labels = ''.join(f'[thumb{i}]' for i in range(len(timestamps)))
-        tile_filter = f"{thumb_labels}tile={columns}x{rows}:padding=4:color=0x333333[out]"
-        filter_complex = ';'.join(filter_parts) + ';' + tile_filter
+        # Filter chain: fps to extract frames -> scale -> tile
+        filter_chain = f"fps={fps_value:.4f},scale={thumb_width}:-1,tile={columns}x{rows}:padding=4:color=0x333333"
         
         cmd = [
-            'ffmpeg', '-y',  # Overwrite output
-            *inputs,
-            '-filter_complex', filter_complex,
-            '-map', '[out]',
+            'ffmpeg', '-y',
+            '-i', file_path,
+            '-vf', filter_chain,
             '-frames:v', '1',
-            '-q:v', '5',  # JPEG quality
+            '-q:v', '5',
             str(cache_path)
         ]
         
@@ -114,11 +107,15 @@ class ThumbnailService:
             if result.returncode == 0 and cache_path.exists():
                 return cache_path
             else:
+                # Log error for debugging
+                if result.stderr:
+                    print(f"ffmpeg error: {result.stderr.decode('utf-8', errors='replace')}")
                 # Clean up failed output
                 if cache_path.exists():
                     cache_path.unlink()
                 return None
         except subprocess.TimeoutExpired:
+            print(f"Thumbnail generation timed out for {file_path}")
             if cache_path.exists():
                 cache_path.unlink()
             return None
