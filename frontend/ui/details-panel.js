@@ -58,14 +58,8 @@ export class DetailsPanel {
           <span class="stat-label">Folders</span>
         </div>
       `);
-    } else {
-      const ext = node.data.name.split('.').pop();
-      const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg'].includes(ext.toLowerCase());
-      const previewHtml = isImage && node.data.preview_url 
-        ? `<div class="details-preview" style="margin-top: 12px;">
-             <img src="${node.data.preview_url}" style="max-width: 200px; max-height: 200px; border-radius: 8px; object-fit: cover;" />
-           </div>`
-        : '';
+} else {
+      const ext = node.data.name.split('.').pop().toLowerCase();
       summary.html(`
         <div class="summary-stat">
           <span class="stat-value">${formatSize(node.data.size)}</span>
@@ -75,7 +69,6 @@ export class DetailsPanel {
           <span class="stat-value">${ext.toUpperCase()}</span>
           <span class="stat-label">Extension</span>
         </div>
-        ${previewHtml}
       `);
     }
 
@@ -135,6 +128,25 @@ export class DetailsPanel {
         ? 'This folder is empty'
         : 'No contents to display';
       tbody.html(`<tr><td colspan="4" class="empty-message">${message}</td></tr>`);
+    }
+
+    // Preview section for image files (after table)
+    const previewContainer = this.container.select('.details-preview-section');
+    if (!node.data.is_dir) {
+      const ext = node.data.name.split('.').pop().toLowerCase();
+      const isImage = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg'].includes(ext);
+      if (isImage && node.data.preview_url) {
+        previewContainer.html(`
+          <div class="details-preview" style="margin-top: 16px; text-align: center;">
+            <img src="${node.data.preview_url}" style="max-width: 100%; max-height: 300px; border-radius: 8px; object-fit: contain;" />
+          </div>
+        `);
+        previewContainer.classed('hidden', false);
+      } else {
+        previewContainer.classed('hidden', true);
+      }
+    } else {
+      previewContainer.classed('hidden', true);
     }
 
     return this;
