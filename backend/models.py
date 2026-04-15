@@ -4,6 +4,15 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 
 
+class VideoMetadata(BaseModel):
+    """Video file metadata extracted via ffprobe."""
+    duration: float = Field(..., description="Duration in seconds")
+    width: int = Field(..., description="Video width in pixels")
+    height: int = Field(..., description="Video height in pixels")
+    codec: Optional[str] = Field(None, description="Video codec name")
+    fps: Optional[float] = Field(None, description="Frames per second")
+
+
 class NodeData(BaseModel):
     """Compact node representation for frontend consumption."""
     id: int = Field(..., description="Unique node ID")
@@ -14,6 +23,7 @@ class NodeData(BaseModel):
     is_dir: bool = Field(..., description="True if directory, false if file")
     error: Optional[str] = Field(None, description="Error message if scan failed")
     preview_url: Optional[str] = Field(None, description="URL for preview (for small images)")
+    video_metadata: Optional[VideoMetadata] = Field(None, description="Video metadata (for video files)")
 
 
 class ScanResponse(BaseModel):

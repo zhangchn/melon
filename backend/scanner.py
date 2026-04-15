@@ -2,8 +2,11 @@
 
 import os
 import time
+import json
+import shutil
+import subprocess
 from pathlib import Path
-from typing import List, Optional, Set, Callable
+from typing import List, Optional, Set, Callable, Dict, Any
 from dataclasses import dataclass, field
 
 import fnmatch
@@ -12,6 +15,12 @@ import fnmatch
 # Image extensions that can be previewed
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg'}
 MAX_PREVIEW_SIZE = 5 * 1024 * 1024  # 5MB
+
+# Video extensions for thumbnail generation
+VIDEO_EXTENSIONS = {'.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.wmv', '.flv'}
+
+# Check if ffprobe is available
+FFPROBE_AVAILABLE = shutil.which('ffprobe') is not None
 
 
 @dataclass
@@ -25,6 +34,83 @@ class ScanNode:
     is_dir: bool
     error: Optional[str] = None
     preview_url: Optional[str] = None
+    video_metadata: Optional[Dict[str, Any]] = None
+
+
+def get_video_metadata(file_path: Path) -> Optional[Dict[str, Any]]:
+    """
+    Extract video metadata using ffprobe.
+    
+    Returns dict with duration, width, height, codec, fps or None on failure.
+    """
+    if not FFPROBE_AVAILABLE:
+        return None
+    
+    try:
+        cmd = [
+            'ffprobe',
+            '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_format',
+            '-show_streams',
+            str(file_path)
+        ]
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10  # 10 second timeout
+        )
+        
+        if result.returncode != 0:
+            return None
+        
+        data = json.loads(result.stdout)
+        
+        # Find video stream
+        video_stream = None
+        for stream in data.get('streams', []):
+            if stream.get('codec_type') == 'video':
+                video_stream = stream
+                break
+        
+        if not video_stream:
+            return None
+        
+        # Extract metadata
+        duration = float(data.get('format', {}).get('duration', 0))
+        width = int(video_stream.get('width', 0))
+        height = int(video_stream.get('height', 0))
+        codec = video_stream.get('codec_name')
+        
+        # Parse fps (can be "30/1" or "29.97" etc)
+        fps = None
+        fps_str = video_stream.get('r_frame_rate') or video_stream.get('avg_frame_rate')
+        if fps_str:
+            try:
+                if '/' in fps_str:
+                    num, den = fps_str.split('/')
+                    if float(den) > 0:
+                        fps = float(num) / float(den)
+                else:
+                    fps = float(fps_str)
+            except (ValueError, ZeroDivisionError):
+                pass
+        
+        if duration > 0 and width > 0 and height > 0:
+            return {
+                'duration': duration,
+                'width': width,
+                'height': height,
+                'codec': codec,
+                'fps': fps
+            }
+        
+        return None
+        
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, ValueError, KeyError):
+        return None
 
 
 class DirectoryScanner:
@@ -163,6 +249,7 @@ class DirectoryScanner:
                 size = 0
                 error = None
                 preview_url = None
+                video_metadata = None
 
                 if not is_dir:
                     try:
@@ -174,6 +261,10 @@ class DirectoryScanner:
                         if ext in IMAGE_EXTENSIONS and size <= MAX_PREVIEW_SIZE:
                             # Generate preview URL (will be handled by backend endpoint)
                             preview_url = f"/api/preview?node_id={node_id}"
+                        
+                        # Extract video metadata for video files
+                        if ext in VIDEO_EXTENSIONS:
+                            video_metadata = get_video_metadata(current_path)
                     except (OSError, PermissionError) as e:
                         error = str(e)
                 else:
@@ -190,6 +281,7 @@ class DirectoryScanner:
                     is_dir=is_dir,
                     error=error,
                     preview_url=preview_url,
+                    video_metadata=video_metadata,
                 )
                 nodes.append(node)
                 current_node_id = node_id  # Capture current node's ID for children

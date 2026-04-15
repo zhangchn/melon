@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 
-from scanner import DirectoryScanner, ScanNode, MAX_PREVIEW_SIZE, IMAGE_EXTENSIONS
+from scanner import DirectoryScanner, ScanNode, MAX_PREVIEW_SIZE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from models import (
     NodeData,
     ScanResponse,
@@ -26,7 +26,9 @@ from models import (
     ConfigResponse,
     ScanProgress,
     ErrorResponse,
+    VideoMetadata,
 )
+from thumbnail_service import ThumbnailService, FFMPEG_AVAILABLE
 
 
 # Configuration
@@ -49,6 +51,9 @@ scanner = DirectoryScanner(
     max_results=MAX_RESULTS,
     follow_symlinks=FOLLOW_SYMLINKS,
 )
+
+# Global thumbnail service instance
+thumbnail_service = ThumbnailService()
 
 # Cache for recent scans (in-memory, simple implementation)
 # In production, use Redis or similar
@@ -80,9 +85,11 @@ async def lifespan(app: FastAPI):
     print(f"Allowed paths: {ALLOWED_PATHS}")
     print(f"Excluded patterns: {EXCLUDED_PATTERNS}")
     print(f"Max depth: {MAX_DEPTH}, Max results: {MAX_RESULTS}")
+    print(f"FFmpeg available: {FFMPEG_AVAILABLE}")
     yield
     # Shutdown
     scan_cache.clear()
+    thumbnail_service.cleanup_on_shutdown()
     print("Disk Usage Analyzer API stopped.")
 
 
@@ -213,6 +220,7 @@ def _build_scan_response(
             is_dir=n.is_dir,
             error=n.error,
             preview_url=n.preview_url,
+            video_metadata=VideoMetadata(**n.video_metadata) if n.video_metadata else None,
         )
         for n in nodes
     ]
@@ -455,6 +463,80 @@ async def get_preview(
         media_type = "application/octet-stream"
 
     return FileResponse(file_path, media_type=media_type)
+
+
+@app.get("/api/thumbnail")
+async def get_thumbnail(
+    node_id: int = Query(..., description="Node ID of the video file"),
+    root: str = Query(..., description="Root path of the scan"),
+):
+    """
+    Generate or retrieve cached thumbnail for a video file.
+    
+    Returns a contact sheet image with thumbnails at exponential timestamps.
+    """
+    if not FFMPEG_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Thumbnail generation requires ffmpeg. Please install ffmpeg."
+        )
+    
+    # Find in cache
+    cache_key = Path(root).resolve()
+
+    if str(cache_key) not in scan_cache:
+        raise HTTPException(status_code=404, detail="Scan not found in cache")
+
+    nodes, _, cache_time = scan_cache[str(cache_key)]
+
+    if time.time() - cache_time >= CACHE_TTL:
+        raise HTTPException(status_code=410, detail="Scan cache expired")
+
+    # Find the node
+    node = None
+    for n in nodes:
+        if n.id == node_id:
+            node = n
+            break
+
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+
+    if node.is_dir:
+        raise HTTPException(status_code=400, detail="Thumbnail is only available for video files")
+
+    # Check if it has video metadata
+    if not node.video_metadata:
+        raise HTTPException(status_code=400, detail="Node is not a video file or has no metadata")
+
+    # Reconstruct full path
+    full_path = scanner.get_path_for_node(nodes, node_id, str(cache_key))
+    file_path = Path(full_path)
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Video file not found")
+
+    # Generate thumbnail
+    duration = node.video_metadata.get('duration', 0)
+    if duration <= 0:
+        raise HTTPException(status_code=400, detail="Invalid video duration")
+
+    file_mtime = file_path.stat().st_mtime
+    
+    cache_path = await thumbnail_service.generate_contact_sheet(
+        str(file_path),
+        duration,
+        file_mtime,
+    )
+
+    if not cache_path:
+        raise HTTPException(status_code=500, detail="Thumbnail generation failed")
+
+    return FileResponse(
+        cache_path,
+        media_type="image/jpeg",
+        filename=f"thumb_{node_id}.jpg"
+    )
 
 
 @app.delete("/api/cache")
