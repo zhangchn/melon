@@ -14,7 +14,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 # Add backend to path
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from main import app, scan_cache, is_path_allowed, ALLOWED_PATHS
 
@@ -416,8 +416,8 @@ class TestPerformance:
 
         # Each node should be compact
         for node in data["nodes"]:
-            # Node shouldn't have excessive data (now 8 with preview_url)
-            assert len(node.keys()) <= 8  # id, parent_id, name, size, depth, is_dir, error, preview_url
+            # 9 fields: id, parent_id, name, size, depth, is_dir, error, preview_url, video_metadata
+            assert len(node.keys()) <= 9
 
 
 class TestPreviewEndpoint:

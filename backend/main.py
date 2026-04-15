@@ -475,68 +475,82 @@ async def get_thumbnail(
     
     Returns a contact sheet image with thumbnails at exponential timestamps.
     """
-    if not FFMPEG_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail="Thumbnail generation requires ffmpeg. Please install ffmpeg."
+    try:
+        if not FFMPEG_AVAILABLE:
+            raise HTTPException(
+                status_code=503,
+                detail="Thumbnail generation requires ffmpeg. Please install ffmpeg."
+            )
+        
+        # Find in cache
+        cache_key = Path(root).resolve()
+        print(f"DEBUG: Looking for cache key: {cache_key}")
+        print(f"DEBUG: Available keys: {list(scan_cache.keys())}")
+
+        if str(cache_key) not in scan_cache:
+            raise HTTPException(status_code=404, detail="Scan not found in cache")
+
+        nodes, _, cache_time = scan_cache[str(cache_key)]
+
+        if time.time() - cache_time >= CACHE_TTL:
+            raise HTTPException(status_code=410, detail="Scan cache expired")
+
+        # Find the node
+        node = None
+        for n in nodes:
+            if n.id == node_id:
+                node = n
+                break
+
+        if not node:
+            raise HTTPException(status_code=404, detail="Node not found")
+
+        if node.is_dir:
+            raise HTTPException(status_code=400, detail="Thumbnail is only available for video files")
+
+        # Check if it has video metadata
+        if not node.video_metadata:
+            raise HTTPException(status_code=400, detail="Node is not a video file or has no metadata")
+
+        # Reconstruct full path
+        full_path = scanner.get_path_for_node(nodes, node_id, str(cache_key))
+        print(f"DEBUG: Reconstructed path: {full_path}")
+        file_path = Path(full_path)
+
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Video file not found")
+
+        # Generate thumbnail
+        duration = node.video_metadata.get('duration', 0)
+        print(f"DEBUG: Duration: {duration}")
+        if duration <= 0:
+            raise HTTPException(status_code=400, detail="Invalid video duration")
+
+        file_mtime = file_path.stat().st_mtime
+        
+        cache_path = await thumbnail_service.generate_contact_sheet(
+            str(file_path),
+            duration,
+            file_mtime,
         )
-    
-    # Find in cache
-    cache_key = Path(root).resolve()
+        
+        print(f"DEBUG: Cache path result: {cache_path}")
 
-    if str(cache_key) not in scan_cache:
-        raise HTTPException(status_code=404, detail="Scan not found in cache")
+        if not cache_path:
+            raise HTTPException(status_code=500, detail="Thumbnail generation failed")
 
-    nodes, _, cache_time = scan_cache[str(cache_key)]
-
-    if time.time() - cache_time >= CACHE_TTL:
-        raise HTTPException(status_code=410, detail="Scan cache expired")
-
-    # Find the node
-    node = None
-    for n in nodes:
-        if n.id == node_id:
-            node = n
-            break
-
-    if not node:
-        raise HTTPException(status_code=404, detail="Node not found")
-
-    if node.is_dir:
-        raise HTTPException(status_code=400, detail="Thumbnail is only available for video files")
-
-    # Check if it has video metadata
-    if not node.video_metadata:
-        raise HTTPException(status_code=400, detail="Node is not a video file or has no metadata")
-
-    # Reconstruct full path
-    full_path = scanner.get_path_for_node(nodes, node_id, str(cache_key))
-    file_path = Path(full_path)
-
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Video file not found")
-
-    # Generate thumbnail
-    duration = node.video_metadata.get('duration', 0)
-    if duration <= 0:
-        raise HTTPException(status_code=400, detail="Invalid video duration")
-
-    file_mtime = file_path.stat().st_mtime
-    
-    cache_path = await thumbnail_service.generate_contact_sheet(
-        str(file_path),
-        duration,
-        file_mtime,
-    )
-
-    if not cache_path:
-        raise HTTPException(status_code=500, detail="Thumbnail generation failed")
-
-    return FileResponse(
-        cache_path,
-        media_type="image/jpeg",
-        filename=f"thumb_{node_id}.jpg"
-    )
+        return FileResponse(
+            cache_path,
+            media_type="image/jpeg",
+            filename=f"thumb_{node_id}.jpg"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"ERROR in thumbnail endpoint: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
 @app.delete("/api/cache")

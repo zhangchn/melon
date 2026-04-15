@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 # Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scanner import DirectoryScanner, ScanNode
 
@@ -14,10 +14,10 @@ def test_scan_current_directory():
     scanner = DirectoryScanner(max_depth=3, max_results=1000)
     
     # Scan the backend directory itself
-    current_dir = str(Path(__file__).parent.resolve())
-    nodes, metadata = scanner.scan(current_dir)
+    backend_dir = str(Path(__file__).parent.parent.resolve())
+    nodes, metadata = scanner.scan(backend_dir)
     
-    print(f"Scanned: {current_dir}")
+    print(f"Scanned: {backend_dir}")
     print(f"  Nodes: {len(nodes)}")
     print(f"  Total size: {metadata['total_size']:,} bytes")
     print(f"  Files: {metadata['total_files']}")
@@ -52,7 +52,7 @@ def test_exclude_patterns():
         max_depth=5,
     )
     
-    current_dir = str(Path(__file__).parent.resolve())
+    current_dir = str(Path(__file__).parent.parent.resolve())
     nodes, _ = scanner.scan(current_dir)
     
     # Check that excluded patterns are not present
@@ -91,7 +91,7 @@ def test_preview_url():
     """Test that preview_url is set for small images."""
     scanner = DirectoryScanner(max_depth=3, max_results=1000)
 
-    current_dir = str(Path(__file__).parent.resolve())
+    current_dir = str(Path(__file__).parent.parent.resolve())
     nodes, _ = scanner.scan(current_dir)
 
     # Check that nodes have preview_url attribute
