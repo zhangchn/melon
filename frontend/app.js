@@ -114,6 +114,11 @@ class App {
       this._showModal('help-modal');
     });
 
+    // Toggle header button
+    document.getElementById('toggle-header-btn').addEventListener('click', () => {
+      this._toggleHeader();
+    });
+
     // Modal close buttons
     document.querySelectorAll('.modal-close').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -567,6 +572,24 @@ class App {
     
     // Update viewer with new selection's preview
     d3.select('#image-viewer-img').attr('src', selectedNode.data.preview_url);
+  }
+
+  // Toggle header and path-bar visibility to save vertical space
+  _toggleHeader() {
+    const header = document.querySelector('.header');
+    const pathBar = document.querySelector('.path-bar');
+    const toggleBtn = document.getElementById('toggle-header-btn');
+    const toggleIcon = toggleBtn.querySelector('.toggle-icon');
+    
+    const isCollapsed = header.classList.toggle('collapsed');
+    pathBar.classList.toggle('collapsed');
+    
+    // Rotate icon: right-pointing when collapsed, down when expanded
+    toggleIcon.style.transform = isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+    toggleBtn.title = isCollapsed ? 'Show header' : 'Hide header (save vertical space)';
+    
+    // Trigger chart resize after toggle
+    window.dispatchEvent(new Event('resize'));
   }
 
   // Utility: Debounce

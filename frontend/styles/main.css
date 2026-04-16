@@ -212,11 +212,10 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 8px 20px;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-color);
+  padding: 8px 20px 8px 4px;
   font-size: 14px;
   overflow-x: auto;
+  flex: 1;
 }
 
 .breadcrumb-placeholder {
@@ -263,6 +262,44 @@ body {
 .breadcrumb-separator {
   color: var(--text-muted);
   padding: 0 4px;
+}
+
+/* Breadcrumb Row with Toggle */
+.breadcrumb-row {
+  display: flex;
+  align-items: center;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.toggle-header-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-left: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.toggle-header-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.toggle-header-btn .toggle-icon {
+  transition: transform 0.2s ease;
+  font-size: 10px;
+}
+
+.header.collapsed,
+.path-bar.collapsed {
+  display: none;
 }
 
 /* Main Content */
