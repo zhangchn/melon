@@ -19,6 +19,10 @@ MAX_PREVIEW_SIZE = 5 * 1024 * 1024  # 5MB
 # Video extensions for thumbnail generation
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.wmv', '.flv'}
 
+# PDF extensions for first page preview
+PDF_EXTENSIONS = {'.pdf'}
+MAX_PDF_SIZE = 50 * 1024 * 1024  # 50MB - larger limit for PDFs
+
 # Check if ffprobe is available
 FFPROBE_AVAILABLE = shutil.which('ffprobe') is not None
 
@@ -261,6 +265,10 @@ class DirectoryScanner:
                         if ext in IMAGE_EXTENSIONS and size <= MAX_PREVIEW_SIZE:
                             # Generate preview URL (will be handled by backend endpoint)
                             preview_url = f"/api/preview?node_id={node_id}"
+                        
+                        # Check if file is a PDF for preview
+                        if ext in PDF_EXTENSIONS and size <= MAX_PDF_SIZE:
+                            preview_url = f"/api/pdf?node_id={node_id}"
                         
                         # Extract video metadata for video files
                         if ext in VIDEO_EXTENSIONS:

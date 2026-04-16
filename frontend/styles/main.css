@@ -696,6 +696,23 @@ body {
   cursor: default;
 }
 
+.image-viewer-img.hidden {
+  display: none;
+}
+
+.pdf-viewer-canvas {
+  max-width: calc(100vw - 80px);
+  max-height: calc(100vh - 80px);
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  background: #fff;
+  cursor: pointer;
+}
+
+.pdf-viewer-canvas.hidden {
+  display: none;
+}
+
 /* Search Panel */
 .search-panel {
   position: fixed;
@@ -1087,8 +1104,21 @@ body {
   display: none !important;
 }
 
+/* Details Backdrop (for mobile) */
+.details-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 850;
+  cursor: pointer;
+}
+
+.details-backdrop.hidden {
+  display: none !important;
+}
+
 /* Responsive */
-@media (max-width: 768px) {
+@media (max-width: 800px) {
   .header {
     padding: 10px 16px;
   }
@@ -1109,12 +1139,64 @@ body {
     padding: 10px;
   }
 
+  /* Details panel as overlay on narrow screens */
+  .main {
+    position: relative;
+  }
+
+  /* Override hidden utility for details panel to allow slide animation */
+  .details-panel.hidden {
+    display: block !important;
+    transform: translateY(100%);
+    pointer-events: none;
+    opacity: 0;
+  }
+
   .details-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
     width: 100%;
-    min-width: 100%;
-    padding: 12px;
+    max-height: 70vh;
+    height: auto;
+    min-width: 0;
+    padding: 16px;
     border-left: none;
     border-top: 1px solid var(--border-color);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
+    z-index: 900;
+    transform: translateY(0);
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+
+  .details-panel:not(.hidden) {
+    transform: translateY(0);
+    pointer-events: auto;
+    opacity: 1;
+  }
+
+  /* Larger close button for mobile */
+  .details-close {
+    width: 36px;
+    height: 36px;
+    font-size: 24px;
+  }
+
+  /* Adjust table for mobile */
+  .details-table th,
+  .details-table td {
+    padding: 8px 10px;
+  }
+
+  .file-name {
+    max-width: 150px;
+  }
+
+  /* Hide percent column on mobile */
+  .details-table .col-percent {
+    display: none;
   }
 
   .search-panel {
@@ -1123,5 +1205,12 @@ body {
 
   .exclude-patterns {
     grid-template-columns: 1fr;
+  }
+
+  /* Fullscreen viewer adjustments */
+  .image-viewer-img,
+  .pdf-viewer-canvas {
+    max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 40px);
   }
 }

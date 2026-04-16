@@ -54,11 +54,34 @@ class ThumbnailService:
         
         return None
     
+    def _make_xstack_layout(self, n, cols=4):
+        layout = []
+
+        for i in range(n):
+            col = i % cols
+            row = i // cols
+
+            # build x
+            if col == 0:
+                x = "0"
+            else:
+                x = "+".join([f"w{row*cols + j}" for j in range(col)])
+
+            # build y
+            if row == 0:
+                y = "0"
+            else:
+                y = "+".join([f"h{r*cols}" for r in range(row)])
+
+            layout.append(f"{x}_{y}")
+
+        return "|".join(layout)
+
     def calculate_timestamps(self, duration: float, max_thumbnails: int = 8) -> List[float]:
         """
         Generate timestamps at exponential intervals.
         
-        Sequence: 3.75s, 7.5s, 15s, 30s, 60s, 120s, 240s, 480s...
+        Sequence: 3.75s, 15s, 60s, 240s, 960s...
         Clamped to video duration.
         """
         base_interval = 3.75  # Start at 3.75 seconds
@@ -67,7 +90,7 @@ class ThumbnailService:
         
         while t < duration and len(timestamps) < max_thumbnails:
             timestamps.append(round(t, 2))
-            t *= 2  # Double each time
+            t *= 4  # Double each time
         
         # Add one more near the end (90% of duration) if space allows
         if duration > 0 and len(timestamps) < max_thumbnails:
@@ -83,13 +106,14 @@ class ThumbnailService:
         duration: float,
         file_mtime: float,
         max_thumbnails: int = 8,
-        thumb_width: int = 160,
+        thumb_width: int = 320,
         columns: int = 4,
         timeout: int = 30
     ) -> Optional[Path]:
         """
         Generate a contact sheet image with thumbnails at calculated timestamps.
         
+        Uses fast seeking with -ss before each input for efficient extraction.
         Returns path to generated image, or None on failure.
         """
         if not FFMPEG_AVAILABLE:
@@ -108,21 +132,34 @@ class ThumbnailService:
         num_thumbs = len(timestamps)
         rows = (num_thumbs + columns - 1) // columns
         
-        # Use fps filter to get evenly distributed frames
-        # fps=1/(duration/num_thumbs) gives us num_thumbs frames over the duration
-        fps_value = num_thumbs / duration if duration > 0 else 1
+        # Build command with -ss before each input for fast seeking
+        # This is much faster than fps filter as it doesn't decode the whole video
+        cmd = ['ffmpeg', '-y']
         
-        # Filter chain: fps to extract frames -> scale -> tile
-        filter_chain = f"fps={fps_value:.4f},scale={thumb_width}:-1,tile={columns}x{rows}:padding=4:color=0x333333"
+        # Add -ss and -i for each timestamp
+        for ts in timestamps:
+            cmd.extend(['-ss', str(ts), '-i', file_path])
         
-        cmd = [
-            'ffmpeg', '-y',
-            '-i', file_path,
-            '-vf', filter_chain,
+        # Build filter_complex: scale each input, then tile them together
+        scale_filters = []
+        scaled_labels = []
+        for i in range(num_thumbs):
+            label = f"v{i}"
+            scale_filters.append(f"[{i}:v]scale={thumb_width}:-1[{label}]")
+            scaled_labels.append(f"[{label}]")
+        
+        # Tile filter combines all scaled frames
+        # tile_filter = f"{''.join(scaled_labels)}tile={columns}x{rows}:padding=4:color=0x333333"
+        xstack_layout = self._make_xstack_layout(num_thumbs)
+        xstack_filter = f"{''.join(scaled_labels)}xstack=inputs={num_thumbs}:layout={xstack_layout}:fill=0x333333"
+        filter_complex = ";".join(scale_filters) + ";" + xstack_filter
+        
+        cmd.extend([
+            '-filter_complex', filter_complex,
             '-frames:v', '1',
             '-q:v', '5',
             str(cache_path)
-        ]
+        ])
         
         try:
             result = subprocess.run(
@@ -135,6 +172,7 @@ class ThumbnailService:
             else:
                 # Log error for debugging
                 if result.stderr:
+                    print(f"ffmpeg command: {cmd}")
                     print(f"ffmpeg error: {result.stderr.decode('utf-8', errors='replace')}")
                 # Clean up failed output
                 if cache_path.exists():
@@ -142,6 +180,7 @@ class ThumbnailService:
                 return None
         except subprocess.TimeoutExpired:
             print(f"Thumbnail generation timed out for {file_path}")
+            print(f"ffmpeg command: {cmd}")
             if cache_path.exists():
                 cache_path.unlink()
             return None

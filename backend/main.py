@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 
-from scanner import DirectoryScanner, ScanNode, MAX_PREVIEW_SIZE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
+from scanner import DirectoryScanner, ScanNode, MAX_PREVIEW_SIZE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, PDF_EXTENSIONS, MAX_PDF_SIZE
 from models import (
     NodeData,
     ScanResponse,
@@ -635,6 +635,78 @@ async def clear_cache(
         return {"cleared": count}
 
 
+@app.get("/api/pdf")
+async def get_pdf(
+    node_id: int = Query(None, description="Node ID of the PDF file"),
+    root: str = Query(None, description="Root path of the scan"),
+    path: str = Query(None, description="Direct file path (fallback when cache expired)"),
+):
+    """
+    Get a PDF file for preview.
+    
+    Returns the PDF file directly for files smaller than 50MB.
+    Supports two modes:
+    1. node_id + root: Uses scan cache (fast, but cache expires)
+    2. path: Direct file access (works when cache expired)
+    """
+    file_path = None
+    
+    # Mode 1: Try scan cache first
+    if node_id is not None and root is not None:
+        cache_key = Path(root).resolve()
+
+        if str(cache_key) in scan_cache:
+            nodes, _, cache_time = scan_cache[str(cache_key)]
+
+            if time.time() - cache_time < CACHE_TTL:
+                # Cache valid - use it
+                node = None
+                for n in nodes:
+                    if n.id == node_id:
+                        node = n
+                        break
+
+                if node:
+                    if node.is_dir:
+                        raise HTTPException(status_code=400, detail="PDF preview is only available for files")
+
+                    # Reconstruct full path
+                    full_path = scanner.get_path_for_node(nodes, node_id, str(cache_key))
+                    file_path = Path(full_path)
+    
+    # Mode 2: Direct path access (fallback when cache misses or expires)
+    if file_path is None and path is not None:
+        # Validate path is allowed
+        if not is_path_allowed(path):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Path not allowed. Allowed paths: {ALLOWED_PATHS}"
+            )
+        
+        file_path = Path(path).resolve()
+
+    if file_path is None:
+        raise HTTPException(
+            status_code=400, 
+            detail="Either node_id+root or path parameter required. Cache may have expired."
+        )
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Check file size
+    if file_path.stat().st_size > MAX_PDF_SIZE:
+        raise HTTPException(status_code=413, detail="File too large for preview")
+
+    # Check if it's a PDF
+    ext = file_path.suffix.lower()
+    if ext not in PDF_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="File is not a PDF")
+
+    # Serve the file
+    return FileResponse(file_path, media_type="application/pdf")
+
+
 # Serve static frontend files (if they exist)
 frontend_path = Path(__file__).parent.parent / "frontend"
 
@@ -645,6 +717,7 @@ if frontend_path.exists():
     # MIME type mapping
     MIME_TYPES = {
         '.js': 'application/javascript',
+        '.mjs': 'application/javascript',  # ES modules
         '.css': 'text/css',
         '.html': 'text/html',
         '.json': 'application/json',
@@ -657,6 +730,7 @@ if frontend_path.exists():
         '.woff2': 'font/woff2',
         '.ttf': 'font/ttf',
         '.eot': 'application/vnd.ms-fontobject',
+        '.map': 'application/json',  # Source maps
     }
     
     @app.get("/")

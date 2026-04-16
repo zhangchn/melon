@@ -5,6 +5,7 @@
 
 import { formatSize, calculatePercentage, getFileIcon, countItems } from '../utils/transform.js';
 import { api } from '../api/client.js';
+import { renderPdfFirstPage, getPdfFitScale, renderPdfPage } from '../utils/pdf-renderer.js';
 
 export class DetailsPanel {
   constructor(container) {
@@ -24,15 +25,49 @@ export class DetailsPanel {
 
     // Initialize image viewer
     this._initImageViewer();
+    
+    // Initialize backdrop (for mobile)
+    this._initBackdrop();
+  }
+
+  _initBackdrop() {
+    const backdrop = d3.select('#details-backdrop');
+    
+    // Click on backdrop to close details panel
+    backdrop.on('click', () => {
+      this.hide();
+    });
+    
+    // Handle resize - show/hide backdrop based on screen width
+    window.addEventListener('resize', () => {
+      if (!this.container.classed('hidden')) {
+        // Panel is visible
+        if (this._isNarrowScreen()) {
+          backdrop.classed('hidden', false);
+        } else {
+          backdrop.classed('hidden', true);
+        }
+      }
+    });
+  }
+
+  _isNarrowScreen() {
+    return window.innerWidth < 800;
   }
 
   _initImageViewer() {
     const viewer = d3.select('#image-viewer');
     const viewerImg = d3.select('#image-viewer-img');
+    const viewerCanvas = d3.select('#pdf-viewer-canvas');
 
     // Click on background to close
     viewer.on('click', () => {
       viewer.classed('hidden', true);
+      viewerImg.classed('hidden', true);
+      viewerCanvas.classed('hidden', true);
+      this._currentPdfUrl = null;
+      this._currentPdfPage = 1;
+      this._currentPdfNumPages = 0;
     });
 
     // Prevent click on image from closing
@@ -40,12 +75,72 @@ export class DetailsPanel {
       event.stopPropagation();
     });
 
-    // Escape key handled in app.js _handleKeyboard()
+    // Prevent click on canvas from closing
+    viewerCanvas.on('click', (event) => {
+      event.stopPropagation();
+      // Toggle page navigation for PDF
+      if (this._currentPdfUrl && this._currentPdfNumPages > 1) {
+        this._showPdfNextPage();
+      }
+    });
+
+    // Initialize PDF state
+    this._currentPdfUrl = null;
+    this._currentPdfPage = 1;
+    this._currentPdfNumPages = 0;
   }
 
   _showImageFullscreen(src) {
-    d3.select('#image-viewer-img').attr('src', src);
+    d3.select('#image-viewer-img').attr('src', src).classed('hidden', false);
+    d3.select('#pdf-viewer-canvas').classed('hidden', true);
     d3.select('#image-viewer').classed('hidden', false);
+  }
+
+  async _showPdfFullscreen(url) {
+    const canvas = document.getElementById('pdf-viewer-canvas');
+    d3.select('#image-viewer-img').classed('hidden', true);
+    d3.select('#pdf-viewer-canvas').classed('hidden', false);
+    d3.select('#image-viewer').classed('hidden', false);
+    
+    // Calculate fit scale for fullscreen (90% of viewport)
+    const maxWidth = window.innerWidth - 80;
+    const maxHeight = window.innerHeight - 80;
+    
+    try {
+      const fitInfo = await getPdfFitScale(url, maxWidth, maxHeight, 1);
+      this._currentPdfUrl = url;
+      this._currentPdfPage = 1;
+      this._currentPdfNumPages = fitInfo.numPages;
+      
+      await renderPdfPage(url, canvas, 1, fitInfo.scale);
+      
+      // Update viewer title to show page info
+      d3.select('#image-viewer').attr('title', 
+        `Page 1 of ${fitInfo.numPages} - Click to go to next page`);
+    } catch (error) {
+      console.error('Error loading PDF:', error);
+      d3.select('#image-viewer').classed('hidden', true);
+    }
+  }
+
+  async _showPdfNextPage() {
+    if (!this._currentPdfUrl || this._currentPdfNumPages <= 1) return;
+    
+    const canvas = document.getElementById('pdf-viewer-canvas');
+    this._currentPdfPage = (this._currentPdfPage % this._currentPdfNumPages) + 1;
+    
+    const maxWidth = window.innerWidth - 80;
+    const maxHeight = window.innerHeight - 80;
+    
+    try {
+      const fitInfo = await getPdfFitScale(this._currentPdfUrl, maxWidth, maxHeight, this._currentPdfPage);
+      await renderPdfPage(this._currentPdfUrl, canvas, this._currentPdfPage, fitInfo.scale);
+      
+      d3.select('#image-viewer').attr('title', 
+        `Page ${this._currentPdfPage} of ${this._currentPdfNumPages} - Click to go to next page`);
+    } catch (error) {
+      console.error('Error rendering PDF page:', error);
+    }
   }
 
   /**
@@ -203,12 +298,13 @@ export class DetailsPanel {
       tbody.html(`<tr><td colspan="4" class="empty-message">${message}</td></tr>`);
     }
 
-// Preview section for image/video files (after table)
+// Preview section for image/video/pdf files (after table)
     const previewContainer = this.container.select('.details-preview-section');
     if (!node.data.is_dir) {
       const ext = node.data.name.split('.').pop().toLowerCase();
       const isImage = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg'].includes(ext);
       const isVideo = node.data.video_metadata != null;
+      const isPdf = ext === 'pdf' && node.data.preview_url;
       
       if (isImage && node.data.preview_url) {
         previewContainer.html(`
@@ -244,6 +340,33 @@ export class DetailsPanel {
         // Click to show fullscreen
         previewContainer.select('.preview-clickable').on('click', () => {
           this._showImageFullscreen(thumbUrl);
+        });
+      } else if (isPdf && node.data.preview_url) {
+        // PDF preview - render first page thumbnail
+        const canvasId = `pdf-thumb-${node.data.id}`;
+        previewContainer.html(`
+          <div class="pdf-preview-section" style="margin-top: 16px;">
+            <div style="font-size: 12px; color: #888; margin-bottom: 8px;">PDF Preview (click to view full)</div>
+            <div style="text-align: center;">
+              <canvas id="${canvasId}" class="preview-clickable" style="max-width: 100%; border-radius: 8px; background: #fff; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></canvas>
+            </div>
+          </div>
+        `);
+        previewContainer.classed('hidden', false);
+        
+        // Render first page thumbnail (async)
+        const canvas = document.getElementById(canvasId);
+        if (canvas) {
+          renderPdfFirstPage(node.data.preview_url, canvas, 0.3).catch(err => {
+            console.error('PDF thumbnail render error:', err);
+            canvas.style.display = 'none';
+            canvas.parentElement.innerHTML = '<div style="padding: 20px; color: #666; font-size: 12px;">PDF preview unavailable</div>';
+          });
+        }
+        
+        // Click to show fullscreen PDF
+        previewContainer.select('.preview-clickable').on('click', () => {
+          this._showPdfFullscreen(node.data.preview_url);
         });
       } else {
         previewContainer.classed('hidden', true);
@@ -295,6 +418,10 @@ export class DetailsPanel {
    */
   show() {
     this.container.classed('hidden', false);
+    // Show backdrop on narrow screens
+    if (this._isNarrowScreen()) {
+      d3.select('#details-backdrop').classed('hidden', false);
+    }
   }
 
   /**
@@ -302,6 +429,8 @@ export class DetailsPanel {
    */
   hide() {
     this.container.classed('hidden', true);
+    // Hide backdrop
+    d3.select('#details-backdrop').classed('hidden', true);
   }
 
   /**

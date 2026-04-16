@@ -4,9 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Web Disk Usage Analyzer</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="fonts/fonts.css">
   <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -73,6 +71,9 @@
           <p>Enter a directory path above to visualize disk usage</p>
         </div>
       </div>
+
+      <!-- Backdrop for mobile details panel -->
+      <div id="details-backdrop" class="details-backdrop hidden"></div>
 
       <!-- Details Panel (Right Sidebar) -->
       <aside id="details" class="details-panel hidden">
@@ -254,9 +255,10 @@
     </div>
   </div>
 
-  <!-- Image Viewer Overlay -->
+  <!-- Image/PDF Viewer Overlay -->
   <div id="image-viewer" class="image-viewer hidden">
-    <img id="image-viewer-img" class="image-viewer-img" src="" alt="Preview" />
+    <img id="image-viewer-img" class="image-viewer-img hidden" src="" alt="Preview" />
+    <canvas id="pdf-viewer-canvas" class="pdf-viewer-canvas hidden"></canvas>
   </div>
 
   <!-- D3.js from CDN -->

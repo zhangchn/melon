@@ -38,6 +38,7 @@ class App {
     // Bind chart events
     this.chart
       .onNodeClick((node) => {
+        this.tooltip.hide();
         this.details.render(this.chart.selectedNode, this.currentData?.root);
         this.details.show();
         this._updateStatus(`Selected: ${node.name} (${formatSize(node.size)})`);
@@ -163,6 +164,7 @@ class App {
         this.chart.clearSelection();
         const currentNode = this.chart.getCurrentNode();
         if (currentNode) {
+          this.tooltip.hide();
           this.details.render(currentNode, this.currentData?.root);
           this.details.show();
           this._updateStatus(`Current folder: ${currentNode.data.name}`);
