@@ -229,6 +229,7 @@ export class SunburstChart {
           .attr('fill', (d) => this._getColor(d))
           .attr('stroke', '#FFFFFF')
           .attr('stroke-width', 1)
+          .attr('vector-effect', 'non-scaling-stroke')
           .attr('cursor', 'pointer')
           .each(function(d) {
             // Start from old position if exists, or from center
