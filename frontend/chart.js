@@ -345,8 +345,10 @@ export class SunburstChart {
               const y = (d.y0 + d.y1) / 2;
               return `translate(${Math.cos(((x - 90) * Math.PI) / 180) * y},${Math.sin(((x - 90) * Math.PI) / 180) * y}) rotate(${x - 90})`;
             })
-            .style('opacity', 1)
+            // Labels stay hidden - only visible on hover
+            .style('opacity', 0)
           )
+          .attr('data-node-id', (d) => d.data.id)
           .attr('text-anchor', 'middle')
           .attr('dy', '0.35em')
           .attr('font-size', '6px')
@@ -375,7 +377,8 @@ export class SunburstChart {
                 return `translate(${Math.cos(((x - 90) * Math.PI) / 180) * y},${Math.sin(((x - 90) * Math.PI) / 180) * y}) rotate(${x - 90})`;
               };
             })
-            .style('opacity', 1)
+            // Labels stay hidden - only visible on hover
+            .style('opacity', 0)
           ),
         (exit) => exit
           .call((exit) => exit

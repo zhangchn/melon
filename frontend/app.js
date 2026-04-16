@@ -201,17 +201,29 @@ class App {
       }
     });
 
-    // Handle hover
+    // Handle hover - show label for hovered segment
     this.chart.paths.on('mouseenter', (event, d) => {
       const rect = event.currentTarget.getBoundingClientRect();
       this.tooltip.show(d, {
         x: rect.left + rect.width / 2,
         y: rect.top,
       });
+      
+      // Show label for this segment
+      const label = this.chart.labelsGroup.select(`text[data-node-id="${d.data.id}"]`);
+      if (label.node()) {
+        d3.select(label.node()).style('opacity', 1);
+      }
     });
 
-    this.chart.paths.on('mouseleave', () => {
+    this.chart.paths.on('mouseleave', (event, d) => {
       this.tooltip.hide();
+      
+      // Hide label for this segment
+      const label = this.chart.labelsGroup.select(`text[data-node-id="${d.data.id}"]`);
+      if (label.node()) {
+        d3.select(label.node()).style('opacity', 0);
+      }
     });
   }
 
