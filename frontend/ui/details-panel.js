@@ -13,6 +13,8 @@ export class DetailsPanel {
     this.currentNode = null;
     this.currentRoot = null;
     this._onFileSelect = null;
+    this._pendingPreviewTimeout = null;
+    this._currentNodeId = null;
 
     this._init();
   }
@@ -149,8 +151,15 @@ export class DetailsPanel {
    * @param {string} rootPath - Root path of the scan (for thumbnail API)
    */
   render(node, rootPath = null) {
+    // Cancel any pending preview load
+    this._cancelPendingPreview();
+    
     this.currentNode = node;
     this.currentRoot = rootPath;
+    
+    // Track current node for delayed preview
+    this._currentNodeId = node?.data?.id;
+    
     console.log('DEBUG render: rootPath=', rootPath, 'currentRoot=', this.currentRoot);
 
     if (!node) {
@@ -306,75 +315,103 @@ export class DetailsPanel {
       const isVideo = node.data.video_metadata != null;
       const isPdf = ext === 'pdf' && node.data.preview_url;
       
-      if (isImage && node.data.preview_url) {
-        previewContainer.html(`
-          <div class="details-preview" style="margin-top: 16px; text-align: center;">
-            <img src="${node.data.preview_url}" class="preview-clickable" style="max-width: 100%; max-height: 300px; border-radius: 8px; object-fit: contain; cursor: pointer;" />
-          </div>
-        `);
-        previewContainer.classed('hidden', false);
-        // Click to show fullscreen
-        previewContainer.select('.preview-clickable').on('click', () => {
-          this._showImageFullscreen(node.data.preview_url);
-        });
-      } else if (isVideo && this.currentRoot) {
-        // Compute full path from hierarchy for cache fallback
-        const filePath = this._getNodePath(node);
-        const thumbUrl = api.getThumbnailUrl(node.data.id, this.currentRoot, filePath);
-        previewContainer.html(`
-          <div class="video-thumbnail-section" style="margin-top: 16px;">
-            <div class="video-thumbnail-header" style="font-size: 12px; color: #888; margin-bottom: 8px;">
-              Video Preview
-            </div>
-            <div class="video-thumbnail-container" style="text-align: center;">
-              <img 
-                src="${thumbUrl}" 
-                class="video-thumbnail-img preview-clickable"
-                style="max-width: 100%; border-radius: 8px; background: #1a1a1a; cursor: pointer;"
-                onerror="this.parentElement.innerHTML='<div style=\\'padding: 20px; color: #666; font-size: 12px;\\'>Thumbnail unavailable</div>'"
-              />
-            </div>
-          </div>
-        `);
-        previewContainer.classed('hidden', false);
-        // Click to show fullscreen
-        previewContainer.select('.preview-clickable').on('click', () => {
-          this._showImageFullscreen(thumbUrl);
-        });
-      } else if (isPdf && node.data.preview_url) {
-        // PDF preview - render first page thumbnail
-        const canvasId = `pdf-thumb-${node.data.id}`;
-        previewContainer.html(`
-          <div class="pdf-preview-section" style="margin-top: 16px;">
-            <div style="font-size: 12px; color: #888; margin-bottom: 8px;">PDF Preview (click to view full)</div>
-            <div style="text-align: center;">
-              <canvas id="${canvasId}" class="preview-clickable" style="max-width: 100%; border-radius: 8px; background: #fff; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></canvas>
-            </div>
-          </div>
-        `);
-        previewContainer.classed('hidden', false);
-        
-        // Render first page thumbnail (async)
-        const canvas = document.getElementById(canvasId);
-        if (canvas) {
-          renderPdfFirstPage(node.data.preview_url, canvas, 0.3).catch(err => {
-            console.error('PDF thumbnail render error:', err);
-            canvas.style.display = 'none';
-            canvas.parentElement.innerHTML = '<div style="padding: 20px; color: #666; font-size: 12px;">PDF preview unavailable</div>';
-          });
+      // Show placeholder initially, load actual preview after delay
+      previewContainer.html(`
+        <div class="details-preview-placeholder" style="margin-top: 16px; text-align: center; padding: 20px; color: #888; font-size: 12px;">
+          Loading preview...
+        </div>
+      `);
+      previewContainer.classed('hidden', false);
+      
+      // Delay preview loading by 1.5s
+      const nodeId = node.data.id;
+      this._pendingPreviewTimeout = setTimeout(() => {
+        // Only load if still showing same node
+        if (this._currentNodeId === nodeId) {
+          this._loadPreviewContent(node, isImage, isVideo, isPdf);
         }
-        
-        // Click to show fullscreen PDF
-        previewContainer.select('.preview-clickable').on('click', () => {
-          this._showPdfFullscreen(node.data.preview_url);
-        });
-      } else {
-        previewContainer.classed('hidden', true);
-      }
+      }, 1500);
     } else {
       previewContainer.classed('hidden', true);
     }
     return this;
+  }
+  
+  _cancelPendingPreview() {
+    if (this._pendingPreviewTimeout) {
+      clearTimeout(this._pendingPreviewTimeout);
+      this._pendingPreviewTimeout = null;
+    }
+  }
+  
+  _loadPreviewContent(node, isImage, isVideo, isPdf) {
+    const previewContainer = this.container.select('.details-preview-section');
+    
+    if (isImage && node.data.preview_url) {
+      previewContainer.html(`
+        <div class="details-preview" style="margin-top: 16px; text-align: center;">
+          <img src="${node.data.preview_url}" class="preview-clickable" style="max-width: 100%; max-height: 300px; border-radius: 8px; object-fit: contain; cursor: pointer;" />
+        </div>
+      `);
+      previewContainer.classed('hidden', false);
+      // Click to show fullscreen
+      previewContainer.select('.preview-clickable').on('click', () => {
+        this._showImageFullscreen(node.data.preview_url);
+      });
+    } else if (isVideo && this.currentRoot) {
+      // Compute full path from hierarchy for cache fallback
+      const filePath = this._getNodePath(node);
+      const thumbUrl = api.getThumbnailUrl(node.data.id, this.currentRoot, filePath);
+      previewContainer.html(`
+        <div class="video-thumbnail-section" style="margin-top: 16px;">
+          <div class="video-thumbnail-header" style="font-size: 12px; color: #888; margin-bottom: 8px;">
+            Video Preview
+          </div>
+          <div class="video-thumbnail-container" style="text-align: center;">
+            <img 
+              src="${thumbUrl}" 
+              class="video-thumbnail-img preview-clickable"
+              style="max-width: 100%; border-radius: 8px; background: #1a1a1a; cursor: pointer;"
+              onerror="this.parentElement.innerHTML='<div style=\'padding: 20px; color: #666; font-size: 12px;\'>Thumbnail unavailable</div>'"
+            />
+          </div>
+        </div>
+      `);
+      previewContainer.classed('hidden', false);
+      // Click to show fullscreen
+      previewContainer.select('.preview-clickable').on('click', () => {
+        this._showImageFullscreen(thumbUrl);
+      });
+    } else if (isPdf && node.data.preview_url) {
+      // PDF preview - render first page thumbnail
+      const canvasId = `pdf-thumb-${node.data.id}`;
+      previewContainer.html(`
+        <div class="pdf-preview-section" style="margin-top: 16px;">
+          <div style="font-size: 12px; color: #888; margin-bottom: 8px;">PDF Preview (click to view full)</div>
+          <div style="text-align: center;">
+            <canvas id="${canvasId}" class="preview-clickable" style="max-width: 100%; border-radius: 8px; background: #fff; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></canvas>
+          </div>
+        </div>
+      `);
+      previewContainer.classed('hidden', false);
+      
+      // Render first page thumbnail (async)
+      const canvas = document.getElementById(canvasId);
+      if (canvas) {
+        renderPdfFirstPage(node.data.preview_url, canvas, 0.3).catch(err => {
+          console.error('PDF thumbnail render error:', err);
+          canvas.style.display = 'none';
+          canvas.parentElement.innerHTML = '<div style="padding: 20px; color: #666; font-size: 12px;">PDF preview unavailable</div>';
+        });
+      }
+      
+      // Click to show fullscreen PDF
+      previewContainer.select('.preview-clickable').on('click', () => {
+        this._showPdfFullscreen(node.data.preview_url);
+      });
+    } else {
+      previewContainer.classed('hidden', true);
+    }
   }
 
   /**
@@ -428,6 +465,8 @@ export class DetailsPanel {
    * Hide the panel
    */
   hide() {
+    this._cancelPendingPreview();
+    this._currentNodeId = null;
     this.container.classed('hidden', true);
     // Hide backdrop
     d3.select('#details-backdrop').classed('hidden', true);

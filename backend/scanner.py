@@ -14,7 +14,7 @@ import fnmatch
 
 # Image extensions that can be previewed
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg'}
-MAX_PREVIEW_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_PREVIEW_SIZE = 12 * 1024 * 1024  # 12MB
 
 # Video extensions for thumbnail generation
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v', '.wmv', '.flv'}

@@ -77,7 +77,7 @@ class ThumbnailService:
 
         return "|".join(layout)
 
-    def calculate_timestamps(self, duration: float, max_thumbnails: int = 8) -> List[float]:
+    def calculate_timestamps(self, duration: float, max_thumbnails: int = 12) -> List[float]:
         """
         Generate timestamps at exponential intervals.
         
@@ -105,7 +105,7 @@ class ThumbnailService:
         file_path: str,
         duration: float,
         file_mtime: float,
-        max_thumbnails: int = 8,
+        max_thumbnails: int = 12,
         thumb_width: int = 320,
         columns: int = 4,
         timeout: int = 30

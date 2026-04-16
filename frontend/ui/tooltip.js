@@ -10,6 +10,8 @@ export class Tooltip {
     this.container = d3.select(container);
     this.tooltip = null;
     this.visible = false;
+    this._pendingPreviewTimeout = null;
+    this._currentNodeId = null;
 
     this._init();
   }
@@ -44,6 +46,12 @@ export class Tooltip {
    */
   show(node, position) {
     const { x, y } = position;
+    
+    // Cancel any pending preview load
+    this._cancelPendingPreview();
+    
+    // Track current node for delayed preview
+    this._currentNodeId = node.data.id;
 
     // Update icon
     const icon = getFileIcon(node.data.name, node.data.is_dir);
@@ -79,13 +87,21 @@ export class Tooltip {
       errorEl.style('display', 'none');
     }
 
-    // Update preview (if available - small images)
+    // Initially hide preview - will load after delay
     const previewEl = this.tooltip.select('.tooltip-preview');
+    previewEl.style('display', 'none');
+    
+    // Delay preview loading by 1.5s
     if (node.data.preview_url) {
-      previewEl.html(`<img src="${node.data.preview_url}" style="max-width: 100px; max-height: 100px; border-radius: 4px; object-fit: cover;" />`)
-        .style('display', 'block');
-    } else {
-      previewEl.style('display', 'none');
+      const nodeId = node.data.id;
+      const previewUrl = node.data.preview_url;
+      this._pendingPreviewTimeout = setTimeout(() => {
+        // Only load if still showing same node
+        if (this._currentNodeId === nodeId && this.visible) {
+          previewEl.html(`<img src="${previewUrl}" style="max-width: 100px; max-height: 100px; border-radius: 4px; object-fit: cover;" />`)
+            .style('display', 'block');
+        }
+      }, 1500);
     }
 
     // Position tooltip
@@ -115,11 +131,21 @@ export class Tooltip {
 
     this.visible = true;
   }
+  
+  _cancelPendingPreview() {
+    if (this._pendingPreviewTimeout) {
+      clearTimeout(this._pendingPreviewTimeout);
+      this._pendingPreviewTimeout = null;
+    }
+  }
 
   /**
    * Hide tooltip
    */
   hide() {
+    this._cancelPendingPreview();
+    this._currentNodeId = null;
+    
     this.tooltip
       .style('visibility', 'hidden')
       .style('opacity', 0);
