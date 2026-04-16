@@ -40,12 +40,7 @@ export class DetailsPanel {
       event.stopPropagation();
     });
 
-    // Escape key to close
-    d3.select(document).on('keydown.imageViewer', (event) => {
-      if (event.key === 'Escape' && !viewer.classed('hidden')) {
-        viewer.classed('hidden', true);
-      }
-    });
+    // Escape key handled in app.js _handleKeyboard()
   }
 
   _showImageFullscreen(src) {
