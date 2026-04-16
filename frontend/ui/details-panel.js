@@ -330,7 +330,7 @@ export class DetailsPanel {
         if (this._currentNodeId === nodeId) {
           this._loadPreviewContent(node, isImage, isVideo, isPdf);
         }
-      }, 1500);
+      }, 500);
     } else {
       previewContainer.classed('hidden', true);
     }

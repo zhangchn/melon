@@ -101,7 +101,7 @@ export class Tooltip {
           previewEl.html(`<img src="${previewUrl}" style="max-width: 100px; max-height: 100px; border-radius: 4px; object-fit: cover;" />`)
             .style('display', 'block');
         }
-      }, 1500);
+      }, 500);
     }
 
     // Position tooltip
