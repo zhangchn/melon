@@ -539,21 +539,13 @@ class App {
       }
       this.chart.goUp();
     } else if (e.key === 'ArrowRight') {
-      // If image viewer is visible, navigate to next image/video
-      const imageViewer = d3.select('#image-viewer');
-      if (!imageViewer.classed('hidden')) {
-        this._navigateImageViewer('next');
-      } else {
-        this.chart.selectNextSibling();
-      }
+      this.chart.selectNextSibling();
+      // Update image viewer if visible and new selection has preview
+      this._updateImageViewerForSelection();
     } else if (e.key === 'ArrowLeft') {
-      // If image viewer is visible, navigate to previous image/video
-      const imageViewer = d3.select('#image-viewer');
-      if (!imageViewer.classed('hidden')) {
-        this._navigateImageViewer('prev');
-      } else {
-        this.chart.selectPrevSibling();
-      }
+      this.chart.selectPrevSibling();
+      // Update image viewer if visible and new selection has preview
+      this._updateImageViewerForSelection();
     } else if (e.key === '0') {
       this.chart.resetZoom();
     } else if (e.key === '?' && !mod) {
@@ -561,31 +553,20 @@ class App {
     }
   }
 
-  // Navigate image viewer to next/previous image/video in current directory
-  _navigateImageViewer(direction) {
-    const currentNode = this.detailsPanel.getCurrentNode();
-    if (!currentNode || !currentNode.children) return;
-
-    // Find all items with preview URLs (images/videos)
-    const mediaItems = currentNode.children
-      .filter(child => child.data.preview_url)
-      .sort((a, b) => a.data.name.localeCompare(b.data.name));
-
-    if (mediaItems.length === 0) return;
-
-    // Find current image in viewer
-    const currentSrc = d3.select('#image-viewer-img').attr('src');
-    const currentIndex = mediaItems.findIndex(item => item.data.preview_url === currentSrc);
-
-    let newIndex;
-    if (direction === 'next') {
-      newIndex = currentIndex < mediaItems.length - 1 ? currentIndex + 1 : 0;
-    } else {
-      newIndex = currentIndex > 0 ? currentIndex - 1 : mediaItems.length - 1;
+  // Update image viewer if visible and newly selected node has a preview
+  _updateImageViewerForSelection() {
+    const imageViewer = d3.select('#image-viewer');
+    if (imageViewer.classed('hidden')) return;
+    
+    const selectedNode = this.chart.selectedNode;
+    if (!selectedNode || !selectedNode.data.preview_url) {
+      // No preview for this node - close the viewer
+      imageViewer.classed('hidden', true);
+      return;
     }
-
-    const newItem = mediaItems[newIndex];
-    d3.select('#image-viewer-img').attr('src', newItem.data.preview_url);
+    
+    // Update viewer with new selection's preview
+    d3.select('#image-viewer-img').attr('src', selectedNode.data.preview_url);
   }
 
   // Utility: Debounce
