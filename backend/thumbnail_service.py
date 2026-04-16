@@ -28,6 +28,32 @@ class ThumbnailService:
         key = hashlib.md5(f"{file_path}:{file_mtime}".encode()).hexdigest()
         return self.cache_dir / f"{key}.jpg"
     
+    def get_video_duration(self, file_path: str) -> Optional[float]:
+        """
+        Get video duration using ffprobe.
+        
+        Returns duration in seconds, or None on failure.
+        """
+        if not FFMPEG_AVAILABLE:
+            return None
+        
+        cmd = [
+            'ffprobe', '-v', 'error',
+            '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            file_path
+        ]
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, timeout=5)
+            if result.returncode == 0:
+                duration_str = result.stdout.decode('utf-8').strip()
+                return float(duration_str) if duration_str else None
+        except Exception as e:
+            print(f"ffprobe error: {e}")
+        
+        return None
+    
     def calculate_timestamps(self, duration: float, max_thumbnails: int = 8) -> List[float]:
         """
         Generate timestamps at exponential intervals.

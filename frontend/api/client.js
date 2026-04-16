@@ -208,13 +208,17 @@ export class DiskAnalyzerApi {
    * Get thumbnail URL for a video file
    * @param {number} nodeId - Node ID of the video file
    * @param {string} root - Root path of the scan
+   * @param {string} filePath - Optional file path fallback (for cache expiration)
    * @returns {string} Thumbnail URL
    */
-  getThumbnailUrl(nodeId, root) {
+  getThumbnailUrl(nodeId, root, filePath = null) {
     const params = new URLSearchParams({
       node_id: nodeId.toString(),
       root: root,
     });
+    if (filePath) {
+      params.set('path', filePath);
+    }
     return `${this.baseUrl}/api/thumbnail?${params}`;
   }
 }

@@ -6,9 +6,6 @@
 import { getNodeColor } from './utils/transform.js';
 
 const DEFAULTS = {
-  width: 600,
-  height: 600,
-  radius: 280,
   animationDuration: 750,
 };
 
@@ -16,25 +13,94 @@ export class SunburstChart {
   constructor(container, options = {}) {
     this.options = { ...DEFAULTS, ...options };
     this.container = d3.select(container);
+    // Resolve container to DOM element (handles both selector strings and elements)
+    this.containerElement = typeof container === 'string'
+      ? document.querySelector(container)
+      : container;
     this.currentNode = null;
     this.selectedNode = null;
     this.root = null;
     this.paths = null;
     this.labels = null;
+    this.originalData = null;
+    
+    // Get initial dimensions from container
+    const { width, height, radius } = this._getContainerSize();
+    this.options.width = width;
+    this.options.height = height;
+    this.options.radius = radius;
+    
+    // Debounced resize handler
+    this._resizeHandler = this._debounce(() => this.resize(), 150);
 
     this._initSvg();
     this._initZoom();
+    this._initResizeListener();
+  }
+
+  _debounce(fn, delay) {
+    let timeout;
+    return (...args) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => fn.apply(this, args), delay);
+    };
+  }
+
+  _getContainerSize() {
+    if (!this.containerElement) {
+      return { width: 600, height: 600, radius: 280 };
+    }
+    const rect = this.containerElement.getBoundingClientRect();
+    const width = Math.max(200, Math.floor(rect.width));
+    const height = Math.max(200, Math.floor(rect.height));
+    // Radius is half of the smaller dimension, with some padding
+    const radius = Math.min(width, height) / 2 - 20;
+    return { width, height, radius: Math.max(80, radius) };
+  }
+
+  _initResizeListener() {
+    window.addEventListener('resize', this._resizeHandler);
+  }
+
+  _removeResizeListener() {
+    window.removeEventListener('resize', this._resizeHandler);
+  }
+
+  /**
+   * Resize the chart to fit its container
+   */
+  resize() {
+    const { width, height, radius } = this._getContainerSize();
+    
+    // Update options
+    this.options.width = width;
+    this.options.height = height;
+    this.options.radius = radius;
+
+    // Update SVG viewBox for new dimensions
+    this.svg
+      .attr('viewBox', [-width / 2, -height / 2, width, height]);
+
+    // Re-render if we have data
+    if (this.originalData && this.currentNode) {
+      // _updateView will re-partition with the new radius
+      this._updateView(this.currentNode, false);
+    }
   }
 
   _initSvg() {
-    const { width, height } = this.options;
+    const { width, height, radius } = this._getContainerSize();
+    
+    // Store radius in options for use by render/updateView
+    this.options.radius = radius;
 
     this.svg = this.container
       .append('svg')
-      .attr('width', width)
-      .attr('height', height)
+      .attr('width', '100%')
+      .attr('height', '100%')
       .attr('viewBox', [-width / 2, -height / 2, width, height])
-      .attr('style', 'max-width: 100%; height: auto; font-family: Inter, system-ui, sans-serif;');
+      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .attr('style', 'font-family: Inter, system-ui, sans-serif;');
 
     this.g = this.svg.append('g').attr('class', 'sunburst-chart');
 
@@ -471,6 +537,45 @@ export class SunburstChart {
   }
 
   /**
+   * Get siblings of a node (children of same parent, sorted by angular position)
+   * @param {object} node - Node to get siblings for
+   * @returns {Array} Sorted siblings array
+   */
+  getSiblings(node) {
+    if (!node || !node.parent) return [];
+    // Sort by x0 angle for clockwise navigation
+    return [...node.parent.children].sort((a, b) => a.x0 - b.x0);
+  }
+
+  /**
+   * Select next sibling (clockwise in chart view)
+   */
+  selectNextSibling() {
+    if (!this.selectedNode) return;
+    const siblings = this.getSiblings(this.selectedNode);
+    if (siblings.length <= 1) return;
+    
+    // Find current index in sorted siblings
+    const currentIndex = siblings.findIndex((s) => s.data.id === this.selectedNode.data.id);
+    const nextIndex = (currentIndex + 1) % siblings.length;
+    this.select(siblings[nextIndex]);
+  }
+
+  /**
+   * Select previous sibling (counter-clockwise in chart view)
+   */
+  selectPrevSibling() {
+    if (!this.selectedNode) return;
+    const siblings = this.getSiblings(this.selectedNode);
+    if (siblings.length <= 1) return;
+    
+    // Find current index in sorted siblings
+    const currentIndex = siblings.findIndex((s) => s.data.id === this.selectedNode.data.id);
+    const prevIndex = (currentIndex - 1 + siblings.length) % siblings.length;
+    this.select(siblings[prevIndex]);
+  }
+
+  /**
    * Zoom in
    */
   zoomIn() {
@@ -561,10 +666,12 @@ export class SunburstChart {
    * Destroy the chart and clean up
    */
   destroy() {
+    this._removeResizeListener();
     this.container.html('');
     this.svg = null;
     this.g = null;
     this.paths = null;
     this.labels = null;
+    this.originalData = null;
   }
 }

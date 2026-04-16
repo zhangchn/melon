@@ -9,6 +9,7 @@ import os
 import gzip
 import json
 import time
+import hashlib
 from pathlib import Path
 from typing import Optional, List
 from contextlib import asynccontextmanager
@@ -64,16 +65,21 @@ CACHE_TTL = 300  # 5 minutes
 def is_path_allowed(path: str) -> bool:
     """Check if a path is within allowed directories."""
     resolved = Path(path).resolve()
+    print(f"DEBUG is_path_allowed: resolved={resolved}")
     
     for allowed in ALLOWED_PATHS.split(","):
         allowed_path = Path(allowed.strip()).resolve()
+        print(f"DEBUG is_path_allowed: checking against allowed_path={allowed_path}")
         try:
             # Check if resolved path starts with allowed path
             resolved.relative_to(allowed_path)
+            print(f"DEBUG is_path_allowed: MATCH! {resolved} is under {allowed_path}")
             return True
         except ValueError:
+            print(f"DEBUG is_path_allowed: no match for {allowed_path}")
             continue
     
+    print(f"DEBUG is_path_allowed: NO MATCH found for {resolved}")
     return False
 
 
@@ -398,41 +404,59 @@ async def search_nodes(
 
 @app.get("/api/preview")
 async def get_preview(
-    node_id: int = Query(..., description="Node ID of the image file"),
-    root: str = Query(..., description="Root path of the scan"),
+    node_id: int = Query(None, description="Node ID of the image file"),
+    root: str = Query(None, description="Root path of the scan"),
+    path: str = Query(None, description="Direct file path (fallback when cache expired)"),
 ):
     """
     Get preview for a small image file.
 
     Returns the image file directly for files smaller than 5MB.
+    Supports two modes:
+    1. node_id + root: Uses scan cache (fast, but cache expires)
+    2. path: Direct file access (works when cache expired)
     """
-    # Find in cache
-    cache_key = Path(root).resolve()
+    file_path = None
+    
+    # Mode 1: Try scan cache first
+    if node_id is not None and root is not None:
+        cache_key = Path(root).resolve()
 
-    if str(cache_key) not in scan_cache:
-        raise HTTPException(status_code=404, detail="Scan not found in cache")
+        if str(cache_key) in scan_cache:
+            nodes, _, cache_time = scan_cache[str(cache_key)]
 
-    nodes, _, cache_time = scan_cache[str(cache_key)]
+            if time.time() - cache_time < CACHE_TTL:
+                # Cache valid - use it
+                node = None
+                for n in nodes:
+                    if n.id == node_id:
+                        node = n
+                        break
 
-    if time.time() - cache_time >= CACHE_TTL:
-        raise HTTPException(status_code=410, detail="Scan cache expired")
+                if node:
+                    if node.is_dir:
+                        raise HTTPException(status_code=400, detail="Preview is only available for files")
 
-    # Find the node
-    node = None
-    for n in nodes:
-        if n.id == node_id:
-            node = n
-            break
-
-    if not node:
-        raise HTTPException(status_code=404, detail="Node not found")
-
-    if node.is_dir:
-        raise HTTPException(status_code=400, detail="Preview is only available for files")
-
-    # Reconstruct full path
-    full_path = scanner.get_path_for_node(nodes, node_id, str(cache_key))
-    file_path = Path(full_path)
+                    # Reconstruct full path
+                    full_path = scanner.get_path_for_node(nodes, node_id, str(cache_key))
+                    file_path = Path(full_path)
+    
+    # Mode 2: Direct path access (fallback when cache misses or expires)
+    if file_path is None and path is not None:
+        # Validate path is allowed
+        if not is_path_allowed(path):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Path not allowed. Allowed paths: {ALLOWED_PATHS}"
+            )
+        
+        file_path = Path(path).resolve()
+    
+    if file_path is None:
+        raise HTTPException(
+            status_code=400, 
+            detail="Either node_id+root or path parameter required. Cache may have expired."
+        )
 
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
@@ -467,11 +491,16 @@ async def get_preview(
 
 @app.get("/api/thumbnail")
 async def get_thumbnail(
-    node_id: int = Query(..., description="Node ID of the video file"),
-    root: str = Query(..., description="Root path of the scan"),
+    node_id: int = Query(None, description="Node ID of the video file (requires scan cache)"),
+    root: str = Query(None, description="Root path of the scan (required with node_id)"),
+    path: str = Query(None, description="Direct file path (alternative to node_id)"),
 ):
     """
     Generate or retrieve cached thumbnail for a video file.
+    
+    Two modes:
+    1. node_id + root: Uses scan cache to resolve path (faster, but cache expires)
+    2. path: Direct file path (works without cache, but requires path validation)
     
     Returns a contact sheet image with thumbnails at exponential timestamps.
     """
@@ -482,48 +511,82 @@ async def get_thumbnail(
                 detail="Thumbnail generation requires ffmpeg. Please install ffmpeg."
             )
         
-        # Find in cache
-        cache_key = Path(root).resolve()
-        print(f"DEBUG: Looking for cache key: {cache_key}")
-        print(f"DEBUG: Available keys: {list(scan_cache.keys())}")
+        file_path = None
+        duration = None
+        
+        # Mode 1: Try scan cache first (fast)
+        if node_id is not None and root is not None:
+            cache_key = Path(root).resolve()
+            print(f"DEBUG: Looking for cache key: {cache_key}")
+            print(f"DEBUG: Available keys: {list(scan_cache.keys())}")
 
-        if str(cache_key) not in scan_cache:
-            raise HTTPException(status_code=404, detail="Scan not found in cache")
+            if str(cache_key) in scan_cache:
+                nodes, _, cache_time = scan_cache[str(cache_key)]
 
-        nodes, _, cache_time = scan_cache[str(cache_key)]
+                if time.time() - cache_time < CACHE_TTL:
+                    # Cache valid - use it
+                    node = None
+                    for n in nodes:
+                        if n.id == node_id:
+                            node = n
+                            break
 
-        if time.time() - cache_time >= CACHE_TTL:
-            raise HTTPException(status_code=410, detail="Scan cache expired")
+                    if node:
+                        if node.is_dir:
+                            raise HTTPException(status_code=400, detail="Thumbnail is only available for video files")
 
-        # Find the node
-        node = None
-        for n in nodes:
-            if n.id == node_id:
-                node = n
-                break
-
-        if not node:
-            raise HTTPException(status_code=404, detail="Node not found")
-
-        if node.is_dir:
-            raise HTTPException(status_code=400, detail="Thumbnail is only available for video files")
-
-        # Check if it has video metadata
-        if not node.video_metadata:
-            raise HTTPException(status_code=400, detail="Node is not a video file or has no metadata")
-
-        # Reconstruct full path
-        full_path = scanner.get_path_for_node(nodes, node_id, str(cache_key))
-        print(f"DEBUG: Reconstructed path: {full_path}")
-        file_path = Path(full_path)
+                        if node.video_metadata:
+                            # Reconstruct full path
+                            full_path = scanner.get_path_for_node(nodes, node_id, str(cache_key))
+                            print(f"DEBUG: Reconstructed path from cache: {full_path}")
+                            file_path = Path(full_path)
+                            duration = node.video_metadata.get('duration', 0)
+                        else:
+                            raise HTTPException(status_code=400, detail="Node is not a video file or has no metadata")
+                    else:
+                        print(f"DEBUG: Node {node_id} not found in cache")
+                else:
+                    print(f"DEBUG: Cache expired for {cache_key}")
+            else:
+                print(f"DEBUG: Cache miss for {cache_key}")
+        
+        # Mode 2: Direct path access (fallback when cache misses or expires)
+        if file_path is None and path is not None:
+            # Validate path is allowed
+            print(f"DEBUG: Checking if path allowed: {path}")
+            print(f"DEBUG: ALLOWED_PATHS: {ALLOWED_PATHS}")
+            if not is_path_allowed(path):
+                print(f"DEBUG: Path NOT allowed: {path}")
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Path not allowed. Allowed paths: {ALLOWED_PATHS}"
+                )
+            
+            file_path = Path(path).resolve()
+            print(f"DEBUG: Using direct path: {file_path}")
+            
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail="Video file not found")
+            
+            # Get video metadata using ffprobe
+            from thumbnail_service import ThumbnailService
+            duration = ThumbnailService().get_video_duration(str(file_path))
+            if not duration:
+                raise HTTPException(status_code=400, detail="Could not determine video duration")
+        
+        # Validate we have what we need
+        if file_path is None:
+            raise HTTPException(
+                status_code=400, 
+                detail="Either node_id+root or path parameter required. Cache may have expired."
+            )
 
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Video file not found")
 
         # Generate thumbnail
-        duration = node.video_metadata.get('duration', 0)
         print(f"DEBUG: Duration: {duration}")
-        if duration <= 0:
+        if duration is None or duration <= 0:
             raise HTTPException(status_code=400, detail="Invalid video duration")
 
         file_mtime = file_path.stat().st_mtime
@@ -539,10 +602,12 @@ async def get_thumbnail(
         if not cache_path:
             raise HTTPException(status_code=500, detail="Thumbnail generation failed")
 
+        # Use node_id if available, otherwise generate a hash for filename
+        thumb_name = f"thumb_{node_id}.jpg" if node_id else f"thumb_{hashlib.md5(str(file_path).encode()).hexdigest()[:8]}.jpg"
         return FileResponse(
             cache_path,
             media_type="image/jpeg",
-            filename=f"thumb_{node_id}.jpg"
+            filename=thumb_name
         )
     except HTTPException:
         raise

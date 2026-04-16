@@ -55,14 +55,39 @@ export function buildHierarchy(scanResult) {
   // Add rootPath to all nodes in the hierarchy
   d3Root.each((node) => {
     node.data.rootPath = rootPath;
-    // Update preview_url to include root parameter
+    // Update preview_url to include root and path parameters
     if (node.data.preview_url) {
+      // Build the full path from hierarchy for fallback when cache expires
+      const nodePath = _buildNodePath(node, rootPath);
       const separator = node.data.preview_url.includes('?') ? '&' : '?';
-      node.data.preview_url = `${node.data.preview_url}${separator}root=${encodeURIComponent(rootPath)}`;
+      node.data.preview_url = `${node.data.preview_url}${separator}root=${encodeURIComponent(rootPath)}&path=${encodeURIComponent(nodePath)}`;
     }
   });
 
   return d3Root;
+}
+
+/**
+ * Build the full path for a node by traversing up the hierarchy
+ * @param {object} node - D3 hierarchy node
+ * @param {string} rootPath - Root path from scan
+ * @returns {string} Full absolute path
+ */
+function _buildNodePath(node, rootPath) {
+  const parts = [];
+  let current = node;
+  while (current) {
+    if (current.data.name) {
+      parts.unshift(current.data.name);
+    }
+    current = current.parent;
+  }
+  // parts[0] is the root name, replace with actual root path
+  if (parts.length > 0 && rootPath) {
+    parts.shift(); // Remove root name
+    return rootPath + (parts.length > 0 ? '/' + parts.join('/') : '');
+  }
+  return '/' + parts.join('/');
 }
 
 /**

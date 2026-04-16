@@ -23,11 +23,8 @@ class App {
   }
 
   _initComponents() {
-    // Initialize chart
-    this.chart = new SunburstChart('#chart', {
-      width: 600,
-      height: 600,
-    });
+    // Initialize chart (dimensions come from container)
+    this.chart = new SunburstChart('#chart');
 
     // Initialize breadcrumb
     this.breadcrumb = new Breadcrumb('#breadcrumb');
@@ -149,6 +146,25 @@ class App {
   }
 
   _bindChartInteractions() {
+    // Handle background click - revert to current folder details
+    d3.select('#chart').on('click', (event) => {
+      // Check if click is on background (not on a path segment)
+      const target = event.target;
+      const isPath = target.tagName === 'path' && target.classList.contains('chart-segment');
+      const isSvg = target.tagName === 'svg' || target.tagName === 'g';
+      
+      if (!isPath && (isSvg || target.id === 'chart' || target.classList.contains('sunburst-chart'))) {
+        // Clear selection and show current folder
+        this.chart.clearSelection();
+        const currentNode = this.chart.getCurrentNode();
+        if (currentNode) {
+          this.details.render(currentNode, this.currentData?.root);
+          this.details.show();
+          this._updateStatus(`Current folder: ${currentNode.data.name}`);
+        }
+      }
+    });
+    
     // Handle segment clicks - use event delegation on the chart container
     d3.select('#chart').select('.sunburst-chart')
       .on('click', (event) => {
@@ -498,6 +514,10 @@ class App {
       this._hideSearch();
     } else if (e.key === 'Backspace') {
       this.chart.goUp();
+    } else if (e.key === 'ArrowRight') {
+      this.chart.selectNextSibling();
+    } else if (e.key === 'ArrowLeft') {
+      this.chart.selectPrevSibling();
     } else if (e.key === '0') {
       this.chart.resetZoom();
     } else if (e.key === '?' && !mod) {
